@@ -26,6 +26,13 @@ async def close_mongo_connection() -> None:
 
 async def create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.users.create_index([("username", ASCENDING)], unique=True)
+    # Enforce the single-bootstrap-Admin rule atomically, including concurrent setup attempts.
+    await db.users.create_index(
+        [("role", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"role": "ADMIN"},
+        name="single_admin_role",
+    )
     await db.subjects.create_index([("code", ASCENDING)], unique=True)
     await db.classes.create_index([("name", ASCENDING)], unique=True)
     await db.sections.create_index([("class_id", ASCENDING), ("name", ASCENDING)], unique=True)
