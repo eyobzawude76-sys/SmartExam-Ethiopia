@@ -725,3 +725,44 @@ def test_password_change_rejects_wrong_or_unchanged_password(client):
         "password": "Admin-Test-Password-123!",
     })
     assert login.status_code == 200
+
+def test_status_update_reports_incomplete_recovery_when_rollback_fails():
+    class FakeUsers:
+        def __init__(self):
+            self.status = True
+            self.calls = 0
+
+        async def find_one(self, *_args, **_kwargs):
+            return {"_id": "teacher-rollback", "role": "TEACHER", "is_active": self.status}
+
+        async def update_one(self, _query, update):
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("simulated user rollback failure")
+            self.status = update["$set"]["is_active"]
+
+    class FailingAssignments:
+        async def update_many(self, _query, _update):
+            raise RuntimeError("simulated assignment write failure")
+
+    class FakeDatabase:
+        def __init__(self):
+            self.users = FakeUsers()
+            self.teacher_assignments = FailingAssignments()
+
+        def __getitem__(self, name):
+            return getattr(self, name)
+
+    db = FakeDatabase()
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(set_user_status(
+            "teacher-rollback",
+            UserStatusInput(is_active=False),
+            db=db,
+            admin={},
+        ))
+
+    assert error.value.status_code == 500
+    assert "recovery was incomplete" in error.value.detail
+    assert db.users.status is False
+
