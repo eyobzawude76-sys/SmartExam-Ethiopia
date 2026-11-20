@@ -136,7 +136,7 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
             )
             raise HTTPException(status_code=409, detail="Exam time ended. Your saved answers were auto-submitted.")
         return {
-            "submission_id": existing["_id"], "deadline_at": existing["deadline_at"],
+            "submission_id": existing["_id"], "deadline_at": as_utc(existing["deadline_at"]),
             "questions": exam["questions_snapshot"], "answers": existing.get("answers", []),
         }
     attempts = await db.submissions.count_documents({
