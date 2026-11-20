@@ -272,9 +272,14 @@ def test_temporary_password_must_be_changed_and_password_change_works(client):
     login = client.post("/api/v1/auth/login", json={"username": username, "password": temporary})
     assert login.status_code == 200, login.text
     assert login.json()["user"]["must_change_password"] is True
-    changed = client.post("/api/v1/auth/change-password", headers={
-        "Authorization": f"Bearer {login.json()['access_token']}"
-    }, json={"current_password": temporary, "new_password": "New-Student-Password-123!"})
+    temporary_token_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    # A temporary-password account must not access protected endpoints.
+    blocked_profile = client.get("/api/v1/auth/me", headers=temporary_token_headers)
+    assert blocked_profile.status_code == 403
+    blocked_admin = client.get("/api/v1/admin/dashboard", headers=temporary_token_headers)
+    assert blocked_admin.status_code == 403
+    changed = client.post("/api/v1/auth/change-password", headers=temporary_token_headers,
+        json={"current_password": temporary, "new_password": "New-Student-Password-123!"})
     assert changed.status_code == 200, changed.text
     new_login = client.post("/api/v1/auth/login", json={
         "username": username, "password": "New-Student-Password-123!"
