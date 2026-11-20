@@ -237,8 +237,19 @@ def test_teacher_can_distribute_one_exam_to_all_assignments_and_publish_together
     assert {(e["subject_id"], e["section_id"]) for e in exams} == {
         (ctx["subject_id"], ctx["section_id"]), (second_subject, second_section)
     }
-    assert exams[0]["questions_snapshot"][0]["question_text"] == "What is 5 + 5?"
-    assert exams[0]["questions_snapshot"][0]["question_id"] != exams[1]["questions_snapshot"][0]["question_id"]
+    # Every target receives an independent question snapshot with the same
+    # authored content and grading key, but a target-specific question ID.
+    snapshots = [exam["questions_snapshot"] for exam in exams]
+    assert all(len(snapshot) == 1 for snapshot in snapshots)
+    for snapshot in snapshots:
+        assert snapshot[0]["question_text"] == "What is 5 + 5?"
+        assert snapshot[0]["options"] == ["8", "9", "10", "11"]
+        assert snapshot[0]["correct_option"] == 2
+        assert snapshot[0]["points"] == 2
+    question_ids = [snapshot[0]["question_id"] for snapshot in snapshots]
+    assert len(set(question_ids)) == 2
+    for exam in exams:
+        assert exam["question_ids"] == [exam["questions_snapshot"][0]["question_id"]]
 
     published = ctx["client"].post("/api/v1/teacher/exams/publish-batch", json={"exam_ids": exam_ids})
     assert published.status_code == 200, published.text
