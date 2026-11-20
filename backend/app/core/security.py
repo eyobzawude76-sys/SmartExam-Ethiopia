@@ -14,10 +14,10 @@ def verify_password(password: str, password_hash: str) -> bool:
     return _password_hash.verify(password, password_hash)
 
 
-def create_access_token(subject: str, role: str) -> str:
+def create_access_token(subject: str, role: str, token_version: int = 0) -> str:
     settings = get_settings()
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    return jwt.encode({"sub": subject, "role": role, "exp": expires}, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode({"sub": subject, "role": role, "token_version": token_version, "exp": expires}, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_access_token(token: str) -> dict:
