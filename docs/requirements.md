@@ -30,6 +30,6 @@
 
 ## Security requirements
 - Enforce every role and assignment boundary on the backend, not only in the UI.
-- Store password hashes only; never store or display plaintext passwords after account creation.
+- Store password hashes only. A temporary password may be returned to Admin once in the account-creation response so it can be shared securely; never persist it in plaintext or provide a way to retrieve it later.
 - Never commit secrets or real student information.
 - Validate inputs and test authorization boundaries.
