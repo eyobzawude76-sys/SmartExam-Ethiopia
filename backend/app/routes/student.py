@@ -143,11 +143,13 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
                 {"_id": existing["_id"], "status": "in_progress"},
                 {"$set": {"status": "submitted", "submitted_at": as_utc(existing["deadline_at"]), "auto_submitted": True}},
             )
-            raise HTTPException(status_code=409, detail="Exam time ended. Your saved answers were auto-submitted.")
-        return {
-            "submission_id": existing["_id"], "deadline_at": as_utc(existing["deadline_at"]),
-            "questions": student_questions(exam), "answers": existing.get("answers", []),
-        }
+            if not exam.get("allow_retakes", False):
+                raise HTTPException(status_code=409, detail="Exam time ended. Your saved answers were auto-submitted.")
+        else:
+            return {
+                "submission_id": existing["_id"], "deadline_at": as_utc(existing["deadline_at"]),
+                "questions": student_questions(exam), "answers": existing.get("answers", []),
+            }
     attempts = await db.submissions.count_documents({
         "exam_id": exam_id, "student_id": student["_id"],
         "status": {"$in": ["submitted", "graded"]},
