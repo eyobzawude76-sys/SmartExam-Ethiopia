@@ -45,6 +45,43 @@ def exam_is_available(exam, current):
     return True
 
 
+async def visible_exams(db, student_id: str, enrollment: dict):
+    candidates = await db.exams.find({
+        "status": "published", "class_id": enrollment["class_id"],
+        "section_id": enrollment["section_id"],
+    }).to_list(500)
+    current = now()
+    visible = []
+    for exam in candidates:
+        if not exam_is_available(exam, current):
+            continue
+        if not exam.get("allow_retakes", False):
+            submitted_attempts = await db.submissions.count_documents({
+                "exam_id": exam["_id"], "student_id": student_id,
+                "status": {"$in": ["submitted", "graded"]},
+            })
+            if submitted_attempts:
+                continue
+        visible.append(safe_exam(exam))
+    return visible
+
+
+async def finalize_expired_attempts(db, student_id: str):
+    current = now()
+    expired = await db.submissions.find({
+        "student_id": student_id, "status": "in_progress",
+        "deadline_at": {"$lte": current},
+    }, {"_id": 1, "deadline_at": 1}).to_list(500)
+    for attempt in expired:
+        await db.submissions.update_one(
+            {"_id": attempt["_id"], "status": "in_progress"},
+            {"$set": {
+                "status": "submitted", "submitted_at": as_utc(attempt["deadline_at"]),
+                "auto_submitted": True,
+            }},
+        )
+
+
 def safe_exam(exam):
     return {
         "id": exam["_id"], "title": exam["title"], "subject_id": exam["subject_id"],
@@ -58,12 +95,8 @@ def safe_exam(exam):
 @router.get("/dashboard")
 async def student_dashboard(db=Depends(get_db), student=Depends(student_account)):
     enrollment = await active_enrollment(db, student["_id"])
-    available = await db.exams.find({
-        "status": "published", "class_id": enrollment["class_id"],
-        "section_id": enrollment["section_id"],
-    }).to_list(500)
-    current = now()
-    exams = [safe_exam(exam) for exam in available if exam_is_available(exam, current)]
+    await finalize_expired_attempts(db, student["_id"])
+    exams = await visible_exams(db, student["_id"], enrollment)
     published_results = await db.submissions.find({
         "student_id": student["_id"], "result_published": True,
     }, {"_id": 0, "exam_id": 1, "score": 1, "total_points": 1, "result_published_at": 1}).to_list(500)
@@ -78,12 +111,8 @@ async def student_dashboard(db=Depends(get_db), student=Depends(student_account)
 @router.get("/exams")
 async def list_available_exams(db=Depends(get_db), student=Depends(student_account)):
     enrollment = await active_enrollment(db, student["_id"])
-    exams = await db.exams.find({
-        "status": "published", "class_id": enrollment["class_id"],
-        "section_id": enrollment["section_id"],
-    }).to_list(500)
-    current = now()
-    return [safe_exam(exam) for exam in exams if exam_is_available(exam, current)]
+    await finalize_expired_attempts(db, student["_id"])
+    return await visible_exams(db, student["_id"], enrollment)
 
 
 @router.post("/exams/{exam_id}/start")
