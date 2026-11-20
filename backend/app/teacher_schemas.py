@@ -43,6 +43,36 @@ class TeacherExamInput(BaseModel):
         return self
 
 
+
+class TeacherAssignmentScope(BaseModel):
+    subject_id: str = Field(min_length=1)
+    class_id: str = Field(min_length=1)
+    section_id: str = Field(min_length=1)
+
+
+class TeacherDistributeExamInput(BaseModel):
+    title: str = Field(min_length=3, max_length=160)
+    source_assignment: TeacherAssignmentScope
+    target_assignments: list[TeacherAssignmentScope] = Field(min_length=1, max_length=100)
+    question_ids: list[str] = Field(min_length=1, max_length=200)
+    duration_minutes: int = Field(ge=1, le=300)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    allow_retakes: bool = False
+
+    @model_validator(mode="after")
+    def validate_distribution(self):
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValueError("ends_at must be later than starts_at")
+        keys = [(a.subject_id, a.class_id, a.section_id) for a in self.target_assignments]
+        if len(set(keys)) != len(keys):
+            raise ValueError("Duplicate target assignments are not allowed")
+        if len(set(self.question_ids)) != len(self.question_ids):
+            raise ValueError("Duplicate question IDs are not allowed")
+        self.title = self.title.strip()
+        return self
+
+
 class TeacherPublishExamsInput(BaseModel):
     exam_ids: list[str] = Field(min_length=1, max_length=100)
 
