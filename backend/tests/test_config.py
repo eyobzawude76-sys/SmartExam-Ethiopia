@@ -7,6 +7,14 @@ from app.core.config import Settings
 SECRET = "ci-test-secret-that-is-at-least-32-characters-long"
 
 
+def test_environment_must_be_explicitly_configured():
+    with pytest.raises(ValidationError, match="app_env"):
+        Settings(
+            _env_file=None,
+            jwt_secret_key=SECRET,
+        )
+
+
 def test_production_requires_https_frontend_origin():
     with pytest.raises(ValidationError, match="must use HTTPS"):
         Settings(
@@ -14,6 +22,16 @@ def test_production_requires_https_frontend_origin():
             app_env="production",
             jwt_secret_key=SECRET,
             frontend_origin="http://example.com",
+        )
+
+
+def test_production_rejects_example_jwt_secret():
+    with pytest.raises(ValidationError, match="unique production JWT_SECRET_KEY"):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            jwt_secret_key="replace-with-a-long-random-secret-at-least-32-characters",
+            frontend_origin="https://exam.example",
         )
 
 
