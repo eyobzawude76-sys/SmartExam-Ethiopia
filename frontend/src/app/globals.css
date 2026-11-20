@@ -38,3 +38,7 @@ small { color:#758097; }
 .grade-row { display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:12px; align-items:center; border-top:1px solid #edf0f5; padding:12px 0; }
 .grade-row small { display:block; margin-top:5px; }
 @media(max-width:520px) { .grade-row { grid-template-columns:1fr; } }
+
+.exam-timer { font-size:1.5rem; font-variant-numeric:tabular-nums; padding:10px 16px; border-radius:10px; background:#f1f5f9; }
+.submission-card .inline-check { margin:9px 0; }
+.submission-card input[type="radio"] { width:auto; }
