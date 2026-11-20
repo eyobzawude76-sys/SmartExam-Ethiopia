@@ -139,7 +139,9 @@ async def list_students(db=Depends(get_db), _=Depends(require_admin)):
 
 @router.get("/teachers/{teacher_id}/assignments")
 async def teacher_assignments(teacher_id: str, db=Depends(get_db), _=Depends(require_admin)):
-    teacher = await db.users.find_one({"_id": teacher_id, "role": "TEACHER", "is_active": True})\n    if teacher is None:\n        raise HTTPException(status_code=404, detail="Active teacher not found")
+    teacher = await db.users.find_one({"_id": teacher_id, "role": "TEACHER", "is_active": True})
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Active teacher not found")
     return await db.teacher_assignments.find({"teacher_id": teacher_id, "is_active": True}, {"_id": 0}).to_list(100)
 
 
