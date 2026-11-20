@@ -28,7 +28,7 @@ def public_user(user):
 async def dashboard(db=Depends(get_db), _=Depends(require_admin)):
     counts = {}
     for name in ("users", "subjects", "classes", "sections", "teacher_assignments", "student_enrollments"):
-        counts[name] = await db[name].count_documents({"is_active": True} if name in ("users", "subjects", "classes", "sections") else {})
+        counts[name] = await db[name].count_documents({"is_active": True})
     return {"counts": counts}
 
 
