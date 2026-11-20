@@ -45,4 +45,11 @@ async def create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.exams.create_index([("teacher_id", ASCENDING), ("created_at", ASCENDING)])
     await db.submissions.create_index([("exam_id", ASCENDING), ("teacher_id", ASCENDING), ("status", ASCENDING)])
     await db.submissions.create_index([("student_id", ASCENDING), ("exam_id", ASCENDING), ("status", ASCENDING)])
+    # At most one active attempt per student and exam, even under concurrent start requests.
+    await db.submissions.create_index(
+        [("exam_id", ASCENDING), ("student_id", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"status": "in_progress"},
+        name="one_active_attempt_per_student_exam",
+    )
     await db.submissions.create_index([("student_id", ASCENDING), ("result_published", ASCENDING)])
