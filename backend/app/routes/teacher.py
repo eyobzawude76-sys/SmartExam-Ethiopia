@@ -34,6 +34,12 @@ async def require_assignment(db, teacher_id: str, subject_id: str, class_id: str
     return assignment
 
 
+async def require_exam_assignment(db, teacher_id: str, exam: dict):
+    await require_assignment(
+        db, teacher_id, exam["subject_id"], exam["class_id"], exam["section_id"],
+    )
+
+
 def question_document(payload: TeacherQuestionInput, teacher_id: str):
     return {
         "_id": str(uuid4()), "teacher_id": teacher_id,
@@ -207,7 +213,19 @@ async def distribute_exam(payload: TeacherDistributeExamInput, db=Depends(get_db
 
 @router.get("/exams")
 async def list_exams(db=Depends(get_db), teacher=Depends(teacher_account)):
-    return await db.exams.find({"teacher_id": teacher["_id"]}).sort("created_at", -1).to_list(500)
+    assignments = await db.teacher_assignments.find(
+        {"teacher_id": teacher["_id"], "is_active": True},
+        {"subject_id": 1, "class_id": 1, "section_id": 1, "_id": 0},
+    ).to_list(100)
+    scopes = [{
+        "subject_id": item["subject_id"], "class_id": item["class_id"],
+        "section_id": item["section_id"],
+    } for item in assignments]
+    if not scopes:
+        return []
+    return await db.exams.find({
+        "teacher_id": teacher["_id"], "$or": scopes,
+    }).sort("created_at", -1).to_list(500)
 
 
 @router.post("/exams/{exam_id}/publish")
@@ -217,9 +235,15 @@ async def publish_exam(exam_id: str, db=Depends(get_db), teacher=Depends(teacher
         raise HTTPException(status_code=404, detail="Exam not found")
     if exam["status"] == "published":
         raise HTTPException(status_code=409, detail="Exam is already published")
+    await require_exam_assignment(db, teacher["_id"], exam)
     if not exam.get("questions_snapshot"):
         raise HTTPException(status_code=422, detail="An exam must contain questions before publishing")
-    await db.exams.update_one({"_id": exam_id}, {"$set": {"status": "published", "published_at": now()}})
+    update = await db.exams.update_one(
+        {"_id": exam_id, "teacher_id": teacher["_id"], "status": "draft"},
+        {"$set": {"status": "published", "published_at": now()}},
+    )
+    if update.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Exam state changed; refresh and try again")
     return {"id": exam_id, "status": "published"}
 
 
@@ -235,6 +259,8 @@ async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_d
         raise HTTPException(status_code=409, detail="Every selected exam must still be a draft")
     if any(not exam.get("questions_snapshot") for exam in exams):
         raise HTTPException(status_code=422, detail="Every exam must contain questions before publishing")
+    for exam in exams:
+        await require_exam_assignment(db, teacher["_id"], exam)
     now_value = now()
     result = await db.exams.update_many({
         "_id": {"$in": payload.exam_ids}, "teacher_id": teacher["_id"], "status": "draft",
@@ -262,6 +288,7 @@ async def list_exam_submissions(exam_id: str, db=Depends(get_db), teacher=Depend
     exam = await db.exams.find_one({"_id": exam_id, "teacher_id": teacher["_id"]})
     if exam is None:
         raise HTTPException(status_code=404, detail="Exam not found")
+    await require_exam_assignment(db, teacher["_id"], exam)
     submissions = await db.submissions.find(
         {"exam_id": exam_id, "teacher_id": teacher["_id"]},
         {"answers": 1, "student_id": 1, "status": 1, "score": 1, "total_points": 1,
@@ -288,6 +315,7 @@ async def grade_submission(submission_id: str, payload: SubmissionGradeInput,
     exam = await db.exams.find_one({"_id": submission["exam_id"], "teacher_id": teacher["_id"]})
     if exam is None:
         raise HTTPException(status_code=404, detail="Exam not found")
+    await require_exam_assignment(db, teacher["_id"], exam)
     if submission.get("result_published", False):
         raise HTTPException(status_code=409, detail="A published result cannot be changed")
     points_by_id = {q["question_id"]: q["points"] for q in exam["questions_snapshot"]}
@@ -323,6 +351,10 @@ async def publish_student_result(submission_id: str, db=Depends(get_db),
     })
     if submission is None:
         raise HTTPException(status_code=404, detail="Graded submission not found")
+    exam = await db.exams.find_one({"_id": submission["exam_id"], "teacher_id": teacher["_id"]})
+    if exam is None:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    await require_exam_assignment(db, teacher["_id"], exam)
     if submission.get("result_published", False):
         raise HTTPException(status_code=409, detail="This student's result is already published")
     update = await db.submissions.update_one({
