@@ -54,8 +54,9 @@ export default function StudentPage() {
     }
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // Authenticated state starts the Student dashboard data load.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (token && !mustChange) refresh().catch(error => {
       setMessage(error instanceof Error ? error.message : "Session expired");
       setToken("");
