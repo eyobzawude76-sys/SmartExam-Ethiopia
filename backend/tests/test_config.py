@@ -7,7 +7,9 @@ from app.core.config import Settings
 SECRET = "ci-test-secret-that-is-at-least-32-characters-long"
 
 
-def test_environment_must_be_explicitly_configured():
+def test_environment_must_be_explicitly_configured(monkeypatch):
+    # CI sets APP_ENV globally; remove it to verify the required-field behavior.
+    monkeypatch.delenv("APP_ENV", raising=False)
     with pytest.raises(ValidationError, match="app_env"):
         Settings(
             _env_file=None,
