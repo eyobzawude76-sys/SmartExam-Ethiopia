@@ -75,6 +75,8 @@ export default function TeacherPage() {
   }, []);
 
   useEffect(() => {
+    // Authenticated state starts the teacher dashboard data load.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (token && !mustChange) refresh().catch(error => {
       setMessage(error instanceof Error ? error.message : "Session expired");
       setToken("");
@@ -288,7 +290,7 @@ export default function TeacherPage() {
             </select>
           </div>})}
           {sub.status!=="graded" && <button disabled={busy} onClick={()=>gradeStudent(sub)}>Save marks</button>}
-          {sub.status==="graded" && !sub.result_published && <button disabled={busy} onClick={()=>publishResult(sub)}>Publish this student's result</button>}
+          {sub.status==="graded" && !sub.result_published && <button disabled={busy} onClick={()=>publishResult(sub)}>Publish this student&apos;s result</button>}
         </article>)}
       </section>}
     </main>
