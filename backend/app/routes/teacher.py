@@ -300,12 +300,18 @@ async def grade_submission(submission_id: str, payload: SubmissionGradeInput,
         raise HTTPException(status_code=422, detail="Every exam question must be graded")
     score = sum(points_by_id[qid] for qid, correct in grades.items() if correct)
     total = exam["total_points"]
-    await db.submissions.update_one({"_id": submission_id}, {"$set": {
+    update = await db.submissions.update_one({
+        "_id": submission_id, "teacher_id": teacher["_id"],
+        "status": {"$in": ["submitted", "graded"]},
+        "result_published": {"$ne": True},
+    }, {"$set": {
         "grades": [{"question_id": qid, "is_correct": correct, "points_awarded": points_by_id[qid] if correct else 0}
                    for qid, correct in grades.items()],
         "score": score, "total_points": total, "status": "graded",
         "graded_at": now(), "graded_by": teacher["_id"],
     }})
+    if update.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Submission changed or result was published; refresh and try again")
     return {"id": submission_id, "score": score, "total_points": total, "status": "graded"}
 
 
@@ -319,8 +325,13 @@ async def publish_student_result(submission_id: str, db=Depends(get_db),
         raise HTTPException(status_code=404, detail="Graded submission not found")
     if submission.get("result_published", False):
         raise HTTPException(status_code=409, detail="This student's result is already published")
-    await db.submissions.update_one({"_id": submission_id}, {"$set": {
+    update = await db.submissions.update_one({
+        "_id": submission_id, "teacher_id": teacher["_id"],
+        "status": "graded", "result_published": {"$ne": True},
+    }, {"$set": {
         "result_published": True, "result_published_at": now(),
         "result_published_by": teacher["_id"],
     }})
+    if update.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Submission changed; refresh before publishing")
     return {"id": submission_id, "result_published": True}
