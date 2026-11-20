@@ -280,13 +280,15 @@ def test_student_answer_save_is_rejected_if_deadline_passes_during_validation(st
     assert started.status_code == 200
     submission_id = started.json()["submission_id"]
     original_answer = {"question_id": ctx["question_id"], "selected_option": 2}
-    ctx["db"].submissions.update_one(
-        {"_id": submission_id},
-        {"$set": {"answers": [original_answer]}},
-    )
-
     before_deadline = datetime.now(timezone.utc)
     after_deadline = before_deadline + timedelta(minutes=1)
+    ctx["db"].submissions.update_one(
+        {"_id": submission_id},
+        {"$set": {
+            "answers": [original_answer],
+            "deadline_at": before_deadline + timedelta(seconds=30),
+        }},
+    )
     times = iter([before_deadline, after_deadline])
     monkeypatch.setattr(student_routes, "now", lambda: next(times))
 
