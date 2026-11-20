@@ -52,6 +52,7 @@ All `/api/v1/admin/*` routes require a valid Admin JWT:
 - `POST /admin/teachers`
 - `GET /admin/teachers`
 - `GET /admin/teachers/{teacher_id}/assignments`
+- `POST /admin/teachers/{teacher_id}/assignments` (add another subject/class/section assignment)
 - `POST /admin/students`
 - `GET /admin/students`
 - `PATCH /admin/users/{user_id}/status`
