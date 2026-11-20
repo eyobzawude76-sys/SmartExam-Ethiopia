@@ -21,7 +21,7 @@ export default function StudentPage() {
   const [results, setResults] = useState<Result[]>([]);
   const [activeExam, setActiveExam] = useState<{ id: string; title: string; submissionId: string; deadline: string; questions: Question[] } | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(-1);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -127,6 +127,7 @@ export default function StudentPage() {
       const initial: Record<string, number> = {};
       for (const answer of data.answers ?? []) initial[answer.question_id] = answer.selected_option;
       setAnswers(initial);
+      setSecondsLeft(-1);
       setActiveExam({ id: exam.id, title: exam.title, submissionId: data.submission_id, deadline: data.deadline_at, questions: data.questions });
     } catch (error) { setMessage(error instanceof Error ? error.message : "Exam start failed"); await refresh(); }
     finally { setBusy(false); }
