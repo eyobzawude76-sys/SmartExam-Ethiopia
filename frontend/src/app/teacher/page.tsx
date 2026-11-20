@@ -193,8 +193,12 @@ export default function TeacherPage() {
   async function gradeStudent(submission: Submission) {
     if (!selectedExam?.questions_snapshot) return;
     const selected = grading[submission._id] ?? {};
+    if (selectedExam.questions_snapshot.some(q => selected[q.question_id] === undefined)) {
+      setMessage("Deebii gaaffii hundaaf ✓ ykn X filadhu.");
+      return;
+    }
     const grades = selectedExam.questions_snapshot.map(q => ({
-      question_id: q.question_id, is_correct: Boolean(selected[q.question_id]),
+      question_id: q.question_id, is_correct: selected[q.question_id],
     }));
     setBusy(true);
     try {
@@ -285,8 +289,8 @@ export default function TeacherPage() {
             const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
             return <div className="grade-row" key={q.question_id}>
             <span>{q.question_text}<small>Student answer: {answerLabel} · {q.points} points</small></span>
-            <select value={String(Boolean(grading[sub._id]?.[q.question_id]))} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
-              <option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
+            <select value={grading[sub._id]?.[q.question_id] === undefined ? "" : String(grading[sub._id][q.question_id])} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
+              <option value="">Choose ✓ / X</option><option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
             </select>
           </div>})}
           {sub.status!=="graded" && <button disabled={busy} onClick={()=>gradeStudent(sub)}>Save marks</button>}
