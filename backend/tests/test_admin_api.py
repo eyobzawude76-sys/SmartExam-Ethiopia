@@ -840,8 +840,8 @@ def test_teacher_creation_cleans_up_partial_assignments_after_duplicate_key_fail
     class FakeAcademicCollection:
         async def find_one(self, query):
             if query.get("is_active") is True:
-                if query.get("_id") == "subject-1":
-                    return {"_id": "subject-1", "is_active": True}
+                if query.get("_id") in {"subject-1", "subject-2"}:
+                    return {"_id": query["_id"], "is_active": True}
                 if query.get("_id") == "class-11":
                     return {"_id": "class-11", "is_active": True}
                 if query.get("_id") in {"section-a", "section-a-2"}:
@@ -882,7 +882,7 @@ def test_teacher_creation_cleans_up_partial_assignments_after_duplicate_key_fail
         temporary_password="Teacher-Temporary-123!",
         assignments=[
             {"subject_id": "subject-1", "class_id": "class-11", "section_id": "section-a"},
-            {"subject_id": "subject-1", "class_id": "class-11", "section_id": "section-a-2"},
+            {"subject_id": "subject-2", "class_id": "class-11", "section_id": "section-a-2"},
         ],
     )
 
