@@ -32,7 +32,7 @@ Configure these as private backend environment variables in the hosting provider
 - `FRONTEND_ORIGIN` — the exact HTTPS origin of the deployed Next.js frontend (for example, `https://your-app.example`, with no path).
 - Set `ACCESS_TOKEN_EXPIRE_MINUTES` to the session lifetime you intend to use.
 
-The API rejects a placeholder JWT secret and non-HTTPS frontend origin in production. The repository does not contain or verify the hosting provider's live environment variables; verify these settings in the provider dashboard before deployment.
+The API rejects a placeholder JWT secret and non-HTTPS frontend origin in production. For the Next.js hosting provider, set `NEXT_PUBLIC_API_BASE_URL=https://your-api.example/api/v1` to the deployed HTTPS API URL. This value is public frontend configuration; never place JWT or MongoDB secrets in a `NEXT_PUBLIC_*` variable. The repository does not contain or verify the hosting provider's live environment variables; verify these settings in both provider dashboards before deployment.
 
 ## 3. Create the first Admin
 Run once from the `backend/` directory:
