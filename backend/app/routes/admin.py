@@ -106,7 +106,7 @@ async def create_teacher(payload: TeacherCreateInput, db=Depends(get_db), admin=
     except DuplicateKeyError:
         await db.users.delete_one({"_id": user_id})
         raise HTTPException(status_code=409, detail="Username or teacher assignment already exists")
-    return {"teacher": public_user(user), "assignments": [{"subject_id": x["subject_id"], "class_id": x["class_id"], "section_id": x["section_id"]} for x in assignment_docs], "temporary_password_displayed": False, "message": "Account created. Share the temporary password securely; it is not stored in plaintext."}
+    return {"teacher": public_user(user), "assignments": [{"subject_id": x["subject_id"], "class_id": x["class_id"], "section_id": x["section_id"]} for x in assignment_docs], "temporary_password_once": payload.temporary_password, "message": "Account created. This temporary password is shown only in this response and is never stored in plaintext."}
 
 
 @router.post("/students", status_code=201)
@@ -124,7 +124,7 @@ async def create_student(payload: StudentCreateInput, db=Depends(get_db), admin=
     except DuplicateKeyError:
         await db.users.delete_one({"_id": user_id})
         raise HTTPException(status_code=409, detail="Username or student enrollment already exists")
-    return {"student": public_user(user), "enrollment": {"class_id": payload.class_id, "section_id": payload.section_id}, "message": "Account created. Share the temporary password securely; it is not stored in plaintext."}
+    return {"student": public_user(user), "enrollment": {"class_id": payload.class_id, "section_id": payload.section_id}, "temporary_password_once": payload.temporary_password, "message": "Account created. This temporary password is shown only in this response and is never stored in plaintext."}
 
 
 @router.get("/teachers")
