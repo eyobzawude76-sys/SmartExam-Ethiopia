@@ -92,10 +92,12 @@ export default function StudentPage() {
   }, [activeExam]);
 
   useEffect(() => {
-    if (activeExam && secondsLeft === 0) {
-      // Timer expiry submits the currently saved answers through the API.
+    if (!activeExam || secondsLeft !== 0) return;
+    // Defer submission to the timer callback rather than setting state in the effect body.
+    const timeout = window.setTimeout(() => {
       submitExam(true).catch(error => setMessage(error instanceof Error ? error.message : "Auto-submit failed"));
-    }
+    }, 0);
+    return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, activeExam]);
 
