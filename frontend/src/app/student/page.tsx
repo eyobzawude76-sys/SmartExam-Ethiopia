@@ -48,8 +48,9 @@ export default function StudentPage() {
     if (!activeExam || busy) return;
     setBusy(true);
     try {
-      // Wait for all queued answer saves before final submission at the deadline.
-      await answerSaveQueue.current;
+      // Wait for queued saves, but still call submit if a final save was rejected
+      // because the deadline elapsed (the backend may already have auto-submitted).
+      await answerSaveQueue.current.catch(() => undefined);
       await request(`/student/submissions/${activeExam.submissionId}/submit`, "POST");
       setActiveExam(null); setAnswers({});
       setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee submit ta'aniiru." : "Qormaata xumurteetta.");
