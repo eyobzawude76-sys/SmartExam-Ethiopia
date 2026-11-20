@@ -111,8 +111,14 @@ export default function AdminPage() {
     setBusy(true); setMessage("");
     try {
       await request(`/admin/users/${user._id}/status`, "PATCH", { is_active: !user.is_active });
-      await refresh();
-      setMessage(`${user.full_name}: account ${user.is_active ? "deactivated" : "activated"}.`);
+      const successMessage = `${user.full_name}: account ${user.is_active ? "deactivated" : "activated"}.`;
+      setMessage(successMessage);
+      try {
+        await refresh();
+      } catch (refreshError) {
+        const detail = refreshError instanceof Error ? refreshError.message : "Unknown refresh error";
+        setMessage(`${successMessage} Dashboard refresh failed: ${detail}. The status update succeeded.`);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Status update failed");
     } finally {
