@@ -217,6 +217,8 @@ async def grade_submission(submission_id: str, payload: SubmissionGradeInput,
     exam = await db.exams.find_one({"_id": submission["exam_id"], "teacher_id": teacher["_id"]})
     if exam is None:
         raise HTTPException(status_code=404, detail="Exam not found")
+    if submission.get("result_published", False):
+        raise HTTPException(status_code=409, detail="A published result cannot be changed")
     points_by_id = {q["question_id"]: q["points"] for q in exam["questions_snapshot"]}
     grades = {}
     for item in payload.grades:
