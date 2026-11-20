@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("MONGODB_URI", "mongodb://127.0.0.1:27017")
@@ -360,3 +361,19 @@ def test_student_cannot_change_answers_after_submission(student_context):
     assert record["answers"] == []
     assert record["status"] == "submitted"
 
+
+
+
+def test_database_allows_only_one_active_attempt_per_student_exam(student_context):
+    ctx = student_context
+    first_id = str(uuid.uuid4())
+    second_id = str(uuid.uuid4())
+    base = {
+        "exam_id": ctx["exam_id"], "teacher_id": ctx["teacher_id"],
+        "student_id": ctx["student_id"], "status": "in_progress",
+        "deadline_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        "answers": [],
+    }
+    ctx["db"].submissions.insert_one({"_id": first_id, **base})
+    with pytest.raises(DuplicateKeyError):
+        ctx["db"].submissions.insert_one({"_id": second_id, **base})
