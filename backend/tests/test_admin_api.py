@@ -116,6 +116,8 @@ def test_admin_can_create_academic_structure_and_users(client):
     })
     assert teacher.status_code == 201, teacher.text
     assert teacher.json()["temporary_password_once"] == teacher_password
+    assert "password_hash" not in teacher.json()["teacher"]
+    assert teacher.json()["teacher"]["role"] == "TEACHER"
     teacher_id = teacher.json()["teacher"]["_id"]
     assert len(client.get(f"/api/v1/admin/teachers/{teacher_id}/assignments").json()) == 1
 
@@ -126,6 +128,8 @@ def test_admin_can_create_academic_structure_and_users(client):
     })
     assert student.status_code == 201, student.text
     assert student.json()["temporary_password_once"] == student_password
+    assert "password_hash" not in student.json()["student"]
+    assert student.json()["student"]["role"] == "STUDENT"
 
     listed_students = client.get("/api/v1/admin/students")
     assert listed_students.status_code == 200
