@@ -844,8 +844,8 @@ def test_teacher_creation_cleans_up_partial_assignments_after_duplicate_key_fail
                     return {"_id": "subject-1", "is_active": True}
                 if query.get("_id") == "class-11":
                     return {"_id": "class-11", "is_active": True}
-                if query.get("_id") == "section-a":
-                    return {"_id": "section-a", "class_id": "class-11", "is_active": True}
+                if query.get("_id") in {"section-a", "section-a-2"}:
+                    return {"_id": query["_id"], "class_id": "class-11", "is_active": True}
             return None
 
     class FakeAssignments:
