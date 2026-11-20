@@ -1,5 +1,6 @@
 import os
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-at-least-32-charac
 os.environ.setdefault("FRONTEND_ORIGIN", "http://localhost:3000")
 
 from app.main import app
+from app.core.database import database
 from app.core.security import hash_password
 
 
@@ -413,3 +415,41 @@ def test_teacher_distribution_rejects_unassigned_target_without_creating_partial
 
     assert response.status_code == 403
     assert ctx["db"].exams.count_documents({"teacher_id": ctx["teacher_id"]}) == 0
+
+
+
+def test_teacher_batch_publish_rolls_back_when_only_some_exams_are_updated(teacher_context, monkeypatch):
+    ctx = teacher_context
+    exam_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+    for exam_id in exam_ids:
+        ctx["db"].exams.insert_one({
+            "_id": exam_id, "teacher_id": ctx["teacher_id"],
+            "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+            "section_id": ctx["section_id"], "status": "draft",
+            "questions_snapshot": [{"question_id": str(uuid.uuid4())}],
+            "created_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+        })
+
+    collection_type = type(database.db.exams)
+    original_update_many = collection_type.update_many
+    calls = {"count": 0}
+
+    async def simulate_partial_batch(collection, filter, update, *args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            partial_filter = dict(filter)
+            partial_filter["_id"] = {"$in": [exam_ids[0]]}
+            await original_update_many(collection, partial_filter, update, *args, **kwargs)
+            return SimpleNamespace(modified_count=1)
+        return await original_update_many(collection, filter, update, *args, **kwargs)
+
+    monkeypatch.setattr(collection_type, "update_many", simulate_partial_batch)
+    response = ctx["client"].post(
+        "/api/v1/teacher/exams/publish-batch", json={"exam_ids": exam_ids}
+    )
+
+    assert response.status_code == 409, response.text
+    records = list(ctx["db"].exams.find({"_id": {"$in": exam_ids}}))
+    assert len(records) == 2
+    assert all(record["status"] == "draft" for record in records)
+    assert all(record.get("published_at") is None for record in records)
