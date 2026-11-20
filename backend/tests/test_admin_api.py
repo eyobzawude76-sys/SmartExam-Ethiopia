@@ -207,3 +207,78 @@ def test_student_cannot_access_admin_dashboard(client):
     assert denied.status_code == 403
     db.users.delete_many({"username": username})
     mongo.close()
+
+
+def test_duplicate_subject_class_and_section_are_rejected(client):
+    suffix = uuid.uuid4().hex[:5].upper()
+    subject_body = {"name": "Biology", "code": f"BIO{suffix}"}
+    first_subject = client.post("/api/v1/admin/subjects", json=subject_body)
+    assert first_subject.status_code == 201, first_subject.text
+    duplicate_subject = client.post("/api/v1/admin/subjects", json=subject_body)
+    assert duplicate_subject.status_code == 409
+
+    class_body = {"name": f"Grade 10 {suffix}"}
+    first_class = client.post("/api/v1/admin/classes", json=class_body)
+    assert first_class.status_code == 201, first_class.text
+    duplicate_class = client.post("/api/v1/admin/classes", json=class_body)
+    assert duplicate_class.status_code == 409
+
+    class_id = first_class.json()["id"]
+    section_body = {"class_id": class_id, "name": "A"}
+    first_section = client.post("/api/v1/admin/sections", json=section_body)
+    assert first_section.status_code == 201, first_section.text
+    duplicate_section = client.post("/api/v1/admin/sections", json=section_body)
+    assert duplicate_section.status_code == 409
+
+
+def test_student_duplicate_username_is_rejected_without_orphan_enrollment(client):
+    class_response = client.post("/api/v1/admin/classes", json={"name": f"Grade 9 {uuid.uuid4().hex[:5]}"})
+    assert class_response.status_code == 201, class_response.text
+    class_id = class_response.json()["id"]
+    section = client.post("/api/v1/admin/sections", json={"class_id": class_id, "name": "C"})
+    assert section.status_code == 201, section.text
+    username = f"studentdup_{uuid.uuid4().hex[:8]}"
+    body = {
+        "full_name": "Duplicate Student",
+        "username": username,
+        "temporary_password": "Student-Temp-Password-123!",
+        "class_id": class_id,
+        "section_id": section.json()["id"],
+    }
+    first = client.post("/api/v1/admin/students", json=body)
+    assert first.status_code == 201, first.text
+    second = client.post("/api/v1/admin/students", json=body)
+    assert second.status_code == 409
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    assert db.users.count_documents({"username": username}) == 1
+    assert db.student_enrollments.count_documents({"student_id": first.json()["student"]["_id"]}) == 1
+    mongo.close()
+
+
+def test_temporary_password_must_be_changed_and_password_change_works(client):
+    class_response = client.post("/api/v1/admin/classes", json={"name": f"Grade 8 {uuid.uuid4().hex[:5]}"})
+    assert class_response.status_code == 201, class_response.text
+    class_id = class_response.json()["id"]
+    section = client.post("/api/v1/admin/sections", json={"class_id": class_id, "name": "D"})
+    assert section.status_code == 201, section.text
+    username = f"pwchange_{uuid.uuid4().hex[:8]}"
+    temporary = "Temporary-Student-123!"
+    created = client.post("/api/v1/admin/students", json={
+        "full_name": "Password Change Student", "username": username,
+        "temporary_password": temporary, "class_id": class_id, "section_id": section.json()["id"],
+    })
+    assert created.status_code == 201, created.text
+    login = client.post("/api/v1/auth/login", json={"username": username, "password": temporary})
+    assert login.status_code == 200, login.text
+    assert login.json()["user"]["must_change_password"] is True
+    changed = client.post("/api/v1/auth/change-password", headers={
+        "Authorization": f"Bearer {login.json()['access_token']}"
+    }, json={"current_password": temporary, "new_password": "New-Student-Password-123!"})
+    assert changed.status_code == 200, changed.text
+    new_login = client.post("/api/v1/auth/login", json={
+        "username": username, "password": "New-Student-Password-123!"
+    })
+    assert new_login.status_code == 200
+    old_login = client.post("/api/v1/auth/login", json={"username": username, "password": temporary})
+    assert old_login.status_code == 401
