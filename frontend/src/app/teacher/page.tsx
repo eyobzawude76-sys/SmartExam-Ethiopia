@@ -137,8 +137,8 @@ export default function TeacherPage() {
   async function createQuestion(event: FormEvent) {
     event.preventDefault(); if (!questionTargets.length) return;
     setBusy(true); setMessage("");
+    let created = 0;
     try {
-      let created = 0;
       for (const target of questionTargets) {
         await request("/teacher/questions", "POST", {
           subject_id: target.subject_id, class_id: target.class_id,
@@ -149,16 +149,20 @@ export default function TeacherPage() {
       }
       setQuestionText(""); setOptions(["", "", "", ""]); setCorrectOption("0"); setPoints("1");
       await refresh(); setMessage(`Gaaffiin assignment ${created} irratti galmaa'eera.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Question create failed"); }
+    } catch (error) {
+      if (created) await refresh().catch(() => undefined);
+      const detail = error instanceof Error ? error.message : "Question create failed";
+      setMessage(created ? `${detail}. Gaaffiin assignment ${created} irratti galmaa'eera; hafan hin milkoofne.` : detail);
+    }
     finally { setBusy(false); }
   }
 
   async function uploadCsv(event: FormEvent) {
     event.preventDefault(); if (!questionTargets.length || !csvFile) return;
     setBusy(true); setMessage("");
+    let imported = 0;
+    let completedTargets = 0;
     try {
-      let imported = 0;
-      let completedTargets = 0;
       for (const target of questionTargets) {
         const form = new FormData(); form.append("file", csvFile);
         const query = new URLSearchParams({
@@ -174,7 +178,11 @@ export default function TeacherPage() {
         completedTargets += 1;
       }
       setCsvFile(null); await refresh(); setMessage(`${imported} gaaffii assignment ${completedTargets} irratti galmaa'e.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "CSV upload failed"); }
+    } catch (error) {
+      if (completedTargets) await refresh().catch(() => undefined);
+      const detail = error instanceof Error ? error.message : "CSV upload failed";
+      setMessage(completedTargets ? `${detail}. Gaaffii ${imported} assignment ${completedTargets} irratti galmaa'eera; hafan hin milkoofne.` : detail);
+    }
     finally { setBusy(false); }
   }
 
