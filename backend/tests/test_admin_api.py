@@ -368,11 +368,15 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
         "is_active": True,
     })
 
+    before_status_change = client.get("/api/v1/admin/dashboard").json()["counts"]
     deactivated = client.patch(
         f"/api/v1/admin/users/{student_id}/status",
         json={"is_active": False},
     )
     assert deactivated.status_code == 200, deactivated.text
+    inactive_counts = client.get("/api/v1/admin/dashboard").json()["counts"]
+    assert inactive_counts["users"] == before_status_change["users"] - 1
+    assert inactive_counts["student_enrollments"] == before_status_change["student_enrollments"] - 1
     assert db.student_enrollments.count_documents({
         "student_id": student_id, "is_active": True
     }) == 0
@@ -388,6 +392,9 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
     assert db.student_enrollments.count_documents({
         "student_id": student_id, "is_active": True
     }) == 1
+    reactivated_counts = client.get("/api/v1/admin/dashboard").json()["counts"]
+    assert reactivated_counts["users"] == before_status_change["users"]
+    assert reactivated_counts["student_enrollments"] == before_status_change["student_enrollments"]
 
     db.users.delete_one({"_id": student_id})
     db.student_enrollments.delete_many({"student_id": student_id})
