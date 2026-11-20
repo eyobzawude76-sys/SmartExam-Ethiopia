@@ -383,6 +383,12 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
     assert db.student_enrollments.count_documents({
         "student_id": student_id, "is_active": False
     }) == 1
+    inactive_student = next(
+        item for item in client.get("/api/v1/admin/students").json()
+        if item["_id"] == student_id
+    )
+    assert inactive_student["class_id"] == "grade-11"
+    assert inactive_student["section_id"] == "section-11-a"
 
     reactivated = client.patch(
         f"/api/v1/admin/users/{student_id}/status",
