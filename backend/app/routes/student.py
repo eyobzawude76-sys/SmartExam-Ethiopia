@@ -240,16 +240,39 @@ async def save_answers(submission_id: str, payload: StudentSaveAnswersInput,
 async def submit_exam(submission_id: str, db=Depends(get_db), student=Depends(student_account)):
     current = now()
     submission = await db.submissions.find_one({
-        "_id": submission_id, "student_id": student["_id"], "status": "in_progress",
+        "_id": submission_id, "student_id": student["_id"],
     })
     if submission is None:
-        raise HTTPException(status_code=404, detail="Active exam attempt not found")
+        raise HTTPException(status_code=404, detail="Exam attempt not found")
+
+    # Make repeated submit requests safe and idempotent for this Student.
+    if submission.get("status") in {"submitted", "graded"}:
+        return {
+            "id": submission_id, "status": submission["status"],
+            "auto_submitted": submission.get("auto_submitted", False),
+        }
+    if submission.get("status") != "in_progress":
+        raise HTTPException(status_code=409, detail="This exam attempt cannot be submitted")
+
     deadline = as_utc(submission["deadline_at"])
     submitted_at = min(current, deadline)
     auto_submitted = current >= deadline
-    await db.submissions.update_one({"_id": submission_id, "status": "in_progress"}, {
+    update = await db.submissions.update_one({
+        "_id": submission_id, "student_id": student["_id"], "status": "in_progress",
+    }, {
         "$set": {"status": "submitted", "submitted_at": submitted_at, "auto_submitted": auto_submitted},
     })
+    if update.matched_count != 1:
+        # Another concurrent submit request may have completed first.
+        latest = await db.submissions.find_one({
+            "_id": submission_id, "student_id": student["_id"],
+        })
+        if latest and latest.get("status") in {"submitted", "graded"}:
+            return {
+                "id": submission_id, "status": latest["status"],
+                "auto_submitted": latest.get("auto_submitted", False),
+            }
+        raise HTTPException(status_code=409, detail="Submission state changed. Refresh and try again.")
     return {"id": submission_id, "status": "submitted", "auto_submitted": auto_submitted}
 
 
