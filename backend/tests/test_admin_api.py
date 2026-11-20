@@ -61,6 +61,37 @@ def test_database_enforces_only_one_admin_account(client):
     mongo.close()
 
 
+def test_bootstrap_admin_must_change_password_before_dashboard_access(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    admin = db.users.find_one({"role": "ADMIN"})
+    assert admin is not None
+    db.users.update_one({"_id": admin["_id"]}, {"$set": {"must_change_password": True}})
+
+    blocked = client.get("/api/v1/admin/dashboard")
+    assert blocked.status_code == 403
+
+    changed = client.post("/api/v1/auth/change-password", json={
+        "current_password": "Admin-Test-Password-123!",
+        "new_password": "Admin-New-Password-456!",
+    })
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["must_change_password"] is False
+    assert client.get("/api/v1/admin/dashboard").status_code == 200
+
+    old_login = client.post("/api/v1/auth/login", json={
+        "username": admin["username"],
+        "password": "Admin-Test-Password-123!",
+    })
+    new_login = client.post("/api/v1/auth/login", json={
+        "username": admin["username"],
+        "password": "Admin-New-Password-456!",
+    })
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+    mongo.close()
+
+
 def test_admin_dashboard_requires_authentication():
     with TestClient(app) as unauthenticated:
         response = unauthenticated.get("/api/v1/admin/dashboard")
