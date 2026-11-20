@@ -49,11 +49,12 @@ export default function TeacherPage() {
   }
 
   async function refresh() {
-    const [dashboard, q, e] = await Promise.all([
-      request("/teacher/dashboard"), request("/teacher/questions"), request("/teacher/exams"),
+    const [dashboard, a, q, e] = await Promise.all([
+      request("/teacher/dashboard"), request("/teacher/assignments"),
+      request("/teacher/questions"), request("/teacher/exams"),
     ]);
     setTeacherName(dashboard.teacher.full_name);
-    setAssignments(dashboard.assignments);
+    setAssignments(a);
     setQuestions(q);
     setExams(e);
     if (!selectedAssignment && dashboard.assignments.length) {
@@ -277,12 +278,15 @@ export default function TeacherPage() {
         {submissions.map(sub=><article className="submission-card" key={sub._id}>
           <h3>{sub.student?.full_name ?? "Student"} (@{sub.student?.username ?? ""})</h3>
           <p className="muted">Status: {sub.status} · {sub.score ?? "—"} / {sub.total_points ?? "—"} · Result {sub.result_published ? "Published" : "Not published"}</p>
-          {selectedExam.questions_snapshot?.map(q=><div className="grade-row" key={q.question_id}>
-            <span>{q.question_text}<small>{q.points} points</small></span>
+          {selectedExam.questions_snapshot?.map(q=>{
+            const answer = sub.answers?.find(item=>item.question_id===q.question_id);
+            const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
+            return <div className="grade-row" key={q.question_id}>
+            <span>{q.question_text}<small>Student answer: {answerLabel} · {q.points} points</small></span>
             <select value={String(Boolean(grading[sub._id]?.[q.question_id]))} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
               <option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
             </select>
-          </div>)}
+          </div>})}
           {sub.status!=="graded" && <button disabled={busy} onClick={()=>gradeStudent(sub)}>Save marks</button>}
           {sub.status==="graded" && !sub.result_published && <button disabled={busy} onClick={()=>publishResult(sub)}>Publish this student's result</button>}
         </article>)}
