@@ -45,7 +45,7 @@ Set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1` in the frontend envi
 
 ## Admin API endpoints
 All `/api/v1/admin/*` routes require a valid Admin JWT:
-- `GET /admin/dashboard`
+- `POST /auth/login` and `POST /auth/change-password`\n- `GET /admin/dashboard`
 - `GET|POST /admin/subjects`
 - `GET|POST /admin/classes`
 - `GET|POST /admin/sections`
