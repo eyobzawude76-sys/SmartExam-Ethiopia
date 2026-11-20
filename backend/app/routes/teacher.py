@@ -64,9 +64,12 @@ async def teacher_dashboard(db=Depends(get_db), teacher=Depends(teacher_account)
     question_count = await db.questions.count_documents({
         **scope_query, "is_active": True,
     }) if scope_query else 0
+    active_exams = await db.exams.find(scope_query, {"_id": 1}).to_list(500) if scope_query else []
+    active_exam_ids = [item["_id"] for item in active_exams]
     pending_count = await db.submissions.count_documents({
-        **scope_query, "status": "submitted",
-    }) if scope_query else 0
+        "teacher_id": teacher["_id"], "exam_id": {"$in": active_exam_ids},
+        "status": "submitted",
+    }) if active_exam_ids else 0
     return {
         "teacher": {"id": teacher["_id"], "username": teacher["username"], "full_name": teacher["full_name"]},
         "assignments": assignments,
