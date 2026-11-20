@@ -11,16 +11,18 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-at-least-32-charac
 os.environ.setdefault("FRONTEND_ORIGIN", "http://localhost:3000")
 
 from app.main import app
-from app.core.database import database
+from pymongo import MongoClient
 from app.core.security import hash_password, verify_password
 
 
 @pytest.fixture
 def client():
     with TestClient(app) as test_client:
-        db = database.db
-        assert db is not None
-        # Use a unique admin username to avoid relying on a persistent DB state.
+        mongo = MongoClient(os.environ["MONGODB_URI"])
+        db = mongo[os.environ["MONGODB_DATABASE"]]
+        # Keep every test isolated while retaining the unique indexes.
+        for collection_name in db.list_collection_names():
+            db[collection_name].delete_many({})
         admin_id = str(uuid.uuid4())
         username = f"admin_{uuid.uuid4().hex[:10]}"
         password = "Admin-Test-Password-123!"
@@ -34,14 +36,9 @@ def client():
         test_client.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
         yield test_client
         test_client.headers.pop("Authorization", None)
-        db.users.delete_many({"username": username})
-        # Each test uses a separate database in CI; clear test-owned records.
-        db.teacher_assignments.delete_many({"created_by_test": True})
-        db.student_enrollments.delete_many({"created_by_test": True})
-        db.users.delete_many({"test_record": True})
-        db.subjects.delete_many({"test_record": True})
-        db.classes.delete_many({"test_record": True})
-        db.sections.delete_many({"test_record": True})
+        for collection_name in db.list_collection_names():
+            db[collection_name].delete_many({})
+        mongo.close()
 
 
 def test_admin_dashboard_requires_authentication():
@@ -96,7 +93,8 @@ def test_admin_rejects_section_from_different_class(client):
 
 
 def test_teacher_cannot_access_admin_endpoints(client):
-    db = database.db
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
     teacher_name = f"teacher_role_{uuid.uuid4().hex[:8]}"
     db.users.insert_one({"_id": str(uuid.uuid4()), "username": teacher_name, "full_name": "Teacher", "password_hash": hash_password("Teacher-Role-Password-123!"), "role": "TEACHER", "is_active": True})
     response = client.post("/api/v1/auth/login", json={"username": teacher_name, "password": "Teacher-Role-Password-123!"})
@@ -104,6 +102,7 @@ def test_teacher_cannot_access_admin_endpoints(client):
     forbidden = client.get("/api/v1/admin/dashboard", headers={"Authorization": f"Bearer {response.json()['access_token']}"})
     assert forbidden.status_code == 403
     db.users.delete_many({"username": teacher_name})
+    mongo.close()
 
 
 def test_password_hash_is_not_plaintext():
