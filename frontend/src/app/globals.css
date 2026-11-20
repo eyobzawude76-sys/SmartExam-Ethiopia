@@ -27,3 +27,14 @@ small { color:#758097; }
 .feedback { padding:12px 14px; border-radius:10px; background:#eaf0fc; color:#244b9b; }
 @media(max-width:900px) { .stats-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:650px) { .admin-grid { grid-template-columns:1fr; } .stats-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-header { align-items:flex-start; } }
+
+.inline-check { display:flex; align-items:center; gap:10px; font-weight:500; }
+.inline-check input { width:auto; }
+.teacher-list-item { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.teacher-list-item small { display:block; margin-top:4px; }
+.teacher-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.submission-card { border:1px solid #e1e6ef; border-radius:12px; padding:16px; margin:14px 0; }
+.submission-card h3 { margin:0 0 8px; }
+.grade-row { display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:12px; align-items:center; border-top:1px solid #edf0f5; padding:12px 0; }
+.grade-row small { display:block; margin-top:5px; }
+@media(max-width:520px) { .grade-row { grid-template-columns:1fr; } }
