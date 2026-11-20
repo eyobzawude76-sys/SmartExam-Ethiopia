@@ -1,0 +1,1 @@
+"""SmartExam Ethiopia backend package."""
