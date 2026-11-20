@@ -287,3 +287,43 @@ def test_temporary_password_must_be_changed_and_password_change_works(client):
     assert new_login.status_code == 200
     old_login = client.post("/api/v1/auth/login", json={"username": username, "password": temporary})
     assert old_login.status_code == 401
+
+
+def test_admin_cannot_add_assignment_to_inactive_teacher(client):
+    subject = client.post("/api/v1/admin/subjects", json={
+        "name": "Geography", "code": f"GEO{uuid.uuid4().hex[:5].upper()}"
+    })
+    assert subject.status_code == 201, subject.text
+    class_response = client.post("/api/v1/admin/classes", json={
+        "name": f"Grade 7 {uuid.uuid4().hex[:5]}"
+    })
+    assert class_response.status_code == 201, class_response.text
+    class_id = class_response.json()["id"]
+    section = client.post("/api/v1/admin/sections", json={
+        "class_id": class_id, "name": "A"
+    })
+    assert section.status_code == 201, section.text
+
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    teacher_id = str(uuid.uuid4())
+    db.users.insert_one({
+        "_id": teacher_id,
+        "username": f"inactive_teacher_{uuid.uuid4().hex[:8]}",
+        "full_name": "Inactive Teacher",
+        "password_hash": hash_password("Inactive-Teacher-Password-123!"),
+        "role": "TEACHER",
+        "is_active": False,
+    })
+    response = client.post(
+        f"/api/v1/admin/teachers/{teacher_id}/assignments",
+        json={
+            "subject_id": subject.json()["id"],
+            "class_id": class_id,
+            "section_id": section.json()["id"],
+        },
+    )
+    assert response.status_code == 404
+    assert db.teacher_assignments.count_documents({"teacher_id": teacher_id}) == 0
+    db.users.delete_one({"_id": teacher_id})
+    mongo.close()
