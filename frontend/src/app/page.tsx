@@ -22,7 +22,7 @@ export default function HomePage() {
             <p>Take exams assigned to your class and section, then view released results.</p>
           </article>
         </div>
-        <p className="notice">V1 foundation — authentication and role-specific dashboards are being built next.</p>
+        <p className="notice">Admin setup is the first implementation phase. <a href="/admin">Open Admin Dashboard</a>.</p>
       </section>
     </main>
   );
