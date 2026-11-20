@@ -94,6 +94,52 @@ def test_teacher_can_create_question_and_publish_exam(teacher_context):
     assert published.json()["status"] == "published"
 
 
+
+
+def test_teacher_can_work_with_multiple_assigned_class_section_subject_combinations(teacher_context):
+    ctx = teacher_context
+    second_subject = str(uuid.uuid4())
+    second_section = str(uuid.uuid4())
+    ctx["db"].subjects.insert_one({
+        "_id": second_subject, "name": "Physics", "code": f"PHY{uuid.uuid4().hex[:4]}",
+        "is_active": True,
+    })
+    ctx["db"].sections.insert_one({
+        "_id": second_section, "class_id": ctx["class_id"], "name": "11-B", "is_active": True,
+    })
+    ctx["db"].teacher_assignments.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "subject_id": second_subject, "class_id": ctx["class_id"],
+        "section_id": second_section, "is_active": True,
+    })
+
+    assignments = ctx["client"].get("/api/v1/teacher/assignments")
+    assert assignments.status_code == 200
+    assert len(assignments.json()) == 2
+
+    question = ctx["client"].post("/api/v1/teacher/questions", json={
+        "subject_id": second_subject, "class_id": ctx["class_id"],
+        "section_id": second_section, "question_text": "What is force?",
+        "options": ["Push or pull", "Mass", "Speed", "Energy"],
+        "correct_option": 0, "points": 1,
+    })
+    assert question.status_code == 201, question.text
+
+    exam = ctx["client"].post("/api/v1/teacher/exams", json={
+        "title": "Physics 11-B", "subject_id": second_subject,
+        "class_id": ctx["class_id"], "section_id": second_section,
+        "question_ids": [question.json()["_id"]], "duration_minutes": 20,
+    })
+    assert exam.status_code == 201, exam.text
+
+    wrong_scope = ctx["client"].post("/api/v1/teacher/exams", json={
+        "title": "Unassigned combination", "subject_id": second_subject,
+        "class_id": ctx["class_id"], "section_id": ctx["section_id"],
+        "question_ids": [question.json()["_id"]], "duration_minutes": 20,
+    })
+    assert wrong_scope.status_code == 403
+
+
 def test_teacher_csv_upload_creates_questions(teacher_context):
     ctx = teacher_context
     csv_data = (
