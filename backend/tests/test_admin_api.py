@@ -104,6 +104,23 @@ def test_admin_can_create_academic_structure_and_users(client):
     assert all("password_hash" not in user for user in listed.json())
 
 
+def test_admin_rejects_whitespace_only_academic_names(client):
+    subject = client.post("/api/v1/admin/subjects", json={"name": "   ", "code": "EMPTY"})
+    assert subject.status_code == 422
+    class_response = client.post("/api/v1/admin/classes", json={"name": "   "})
+    assert class_response.status_code == 422
+
+    created_class = client.post("/api/v1/admin/classes", json={"name": f"Grade 5 {uuid.uuid4().hex[:5]}"})
+    assert created_class.status_code == 201
+    section = client.post("/api/v1/admin/sections", json={"class_id": created_class.json()["id"], "name": "   "})
+    assert section.status_code == 422
+
+
+def test_login_rejects_invalid_username_characters(client):
+    response = client.post("/api/v1/auth/login", json={"username": "invalid username", "password": "Any-Password-123!"})
+    assert response.status_code == 422
+
+
 def test_admin_rejects_section_from_different_class(client):
     first = client.post("/api/v1/admin/classes", json={"name": f"Grade 11 {uuid.uuid4().hex[:4]}"}).json()["id"]
     second = client.post("/api/v1/admin/classes", json={"name": f"Grade 12 {uuid.uuid4().hex[:4]}"}).json()["id"]
