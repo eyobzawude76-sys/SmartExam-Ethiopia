@@ -144,9 +144,13 @@ async def upload_questions_csv(file: UploadFile = File(...), subject_id: str = "
         required = {"question_text", "option_a", "option_b", "option_c", "option_d", "correct_option"}
         if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
             raise ValueError("CSV headers must include question_text, option_a, option_b, option_c, option_d, correct_option")
+        if len(reader.fieldnames) != len(set(reader.fieldnames)):
+            raise ValueError("CSV headers must not contain duplicate columns")
         docs = []
         for row_number, row in enumerate(reader, start=2):
-            options = [row.get(f"option_{letter}", "").strip() for letter in "abcd"]
+            if None in row:
+                raise ValueError(f"CSV row {row_number} contains more values than the header")
+            options = [(row.get(f"option_{letter}") or "").strip() for letter in "abcd"]
             answer = (row.get("correct_option") or "").strip().upper()
             if answer not in {"A", "B", "C", "D", "1", "2", "3", "4"}:
                 raise ValueError(f"Invalid correct_option on CSV row {row_number}")
