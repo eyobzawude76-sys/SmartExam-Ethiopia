@@ -139,6 +139,113 @@ def test_admin_can_create_academic_structure_and_users(client):
     assert all("password_hash" not in user for user in listed.json())
 
 
+
+def test_teacher_and_student_must_change_temporary_password_before_role_access(client):
+    subject = client.post("/api/v1/admin/subjects", json={
+        "name": "Geography", "code": f"GEO{uuid.uuid4().hex[:5].upper()}",
+    })
+    class_response = client.post("/api/v1/admin/classes", json={
+        "name": f"Grade 11 {uuid.uuid4().hex[:5]}",
+    })
+    assert subject.status_code == 201
+    assert class_response.status_code == 201
+    class_id = class_response.json()["id"]
+    section = client.post("/api/v1/admin/sections", json={
+        "class_id": class_id, "name": "A",
+    })
+    assert section.status_code == 201
+    section_id = section.json()["id"]
+
+    teacher_username = f"tempteacher_{uuid.uuid4().hex[:8]}"
+    teacher_temp_password = "Teacher-Temporary-Password-123!"
+    teacher = client.post("/api/v1/admin/teachers", json={
+        "username": teacher_username,
+        "full_name": "Temporary Password Teacher",
+        "temporary_password": teacher_temp_password,
+        "assignments": [{
+            "subject_id": subject.json()["id"],
+            "class_id": class_id,
+            "section_id": section_id,
+        }],
+    })
+    assert teacher.status_code == 201, teacher.text
+
+    student_username = f"tempstudent_{uuid.uuid4().hex[:8]}"
+    student_temp_password = "Student-Temporary-Password-123!"
+    student = client.post("/api/v1/admin/students", json={
+        "username": student_username,
+        "full_name": "Temporary Password Student",
+        "temporary_password": student_temp_password,
+        "class_id": class_id,
+        "section_id": section_id,
+    })
+    assert student.status_code == 201, student.text
+
+    teacher_login = client.post("/api/v1/auth/login", json={
+        "username": teacher_username, "password": teacher_temp_password,
+    })
+    assert teacher_login.status_code == 200, teacher_login.text
+    teacher_token = teacher_login.json()["access_token"]
+    assert teacher_login.json()["user"]["must_change_password"] is True
+    assert client.get("/api/v1/teacher/dashboard", headers={
+        "Authorization": f"Bearer {teacher_token}",
+    }).status_code == 403
+
+    wrong_teacher_password = client.post("/api/v1/auth/change-password", headers={
+        "Authorization": f"Bearer {teacher_token}",
+    }, json={
+        "current_password": "Wrong-Temporary-Password-123!",
+        "new_password": "Teacher-New-Password-456!",
+    })
+    assert wrong_teacher_password.status_code == 400
+    changed_teacher = client.post("/api/v1/auth/change-password", headers={
+        "Authorization": f"Bearer {teacher_token}",
+    }, json={
+        "current_password": teacher_temp_password,
+        "new_password": "Teacher-New-Password-456!",
+    })
+    assert changed_teacher.status_code == 200, changed_teacher.text
+    assert client.get("/api/v1/teacher/dashboard", headers={
+        "Authorization": f"Bearer {teacher_token}",
+    }).status_code == 200
+
+    student_login = client.post("/api/v1/auth/login", json={
+        "username": student_username, "password": student_temp_password,
+    })
+    assert student_login.status_code == 200, student_login.text
+    student_token = student_login.json()["access_token"]
+    assert student_login.json()["user"]["must_change_password"] is True
+    assert client.get("/api/v1/student/exams", headers={
+        "Authorization": f"Bearer {student_token}",
+    }).status_code == 403
+
+    changed_student = client.post("/api/v1/auth/change-password", headers={
+        "Authorization": f"Bearer {student_token}",
+    }, json={
+        "current_password": student_temp_password,
+        "new_password": "Student-New-Password-456!",
+    })
+    assert changed_student.status_code == 200, changed_student.text
+    assert client.get("/api/v1/student/exams", headers={
+        "Authorization": f"Bearer {student_token}",
+    }).status_code == 200
+
+    teacher_relogin = client.post("/api/v1/auth/login", json={
+        "username": teacher_username, "password": "Teacher-New-Password-456!",
+    })
+    student_relogin = client.post("/api/v1/auth/login", json={
+        "username": student_username, "password": "Student-New-Password-456!",
+    })
+    assert teacher_relogin.status_code == 200
+    assert student_relogin.status_code == 200
+    assert client.post("/api/v1/auth/login", json={
+        "username": teacher_username, "password": teacher_temp_password,
+    }).status_code == 401
+    assert client.post("/api/v1/auth/login", json={
+        "username": student_username, "password": student_temp_password,
+    }).status_code == 401
+
+
 def test_admin_rejects_whitespace_only_academic_names(client):
     subject = client.post("/api/v1/admin/subjects", json={"name": "   ", "code": "EMPTY"})
     assert subject.status_code == 422
