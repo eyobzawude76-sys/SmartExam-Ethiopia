@@ -61,8 +61,8 @@ def student_context():
         client.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
         yield {
             "client": client, "db": db, "mongo": mongo, "student_id": student_id,
-            "class_id": class_id, "section_id": section_id, "exam_id": exam_id,
-            "question_id": question_id, "teacher_id": teacher_id,
+            "class_id": class_id, "section_id": section_id, "subject_id": subject_id,
+            "exam_id": exam_id, "question_id": question_id, "teacher_id": teacher_id,
         }
         client.headers.pop("Authorization", None)
         for name in db.list_collection_names():
