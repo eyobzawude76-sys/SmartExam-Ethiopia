@@ -45,6 +45,20 @@ def exam_is_available(exam, current):
     return True
 
 
+async def exam_teacher_is_active(db, exam: dict):
+    teacher = await db.users.find_one({
+        "_id": exam["teacher_id"], "role": "TEACHER", "is_active": True,
+    }, {"_id": 1})
+    if teacher is None:
+        return False
+    assignment = await db.teacher_assignments.find_one({
+        "teacher_id": exam["teacher_id"], "subject_id": exam["subject_id"],
+        "class_id": exam["class_id"], "section_id": exam["section_id"],
+        "is_active": True,
+    }, {"_id": 1})
+    return assignment is not None
+
+
 async def visible_exams(db, student_id: str, enrollment: dict):
     candidates = await db.exams.find({
         "status": "published", "class_id": enrollment["class_id"],
@@ -53,7 +67,7 @@ async def visible_exams(db, student_id: str, enrollment: dict):
     current = now()
     visible = []
     for exam in candidates:
-        if not exam_is_available(exam, current):
+        if not exam_is_available(exam, current) or not await exam_teacher_is_active(db, exam):
             continue
         if not exam.get("allow_retakes", False):
             submitted_attempts = await db.submissions.count_documents({
@@ -132,7 +146,7 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
         "_id": exam_id, "status": "published",
         "class_id": enrollment["class_id"], "section_id": enrollment["section_id"],
     })
-    if exam is None or not exam_is_available(exam, current):
+    if exam is None or not exam_is_available(exam, current) or not await exam_teacher_is_active(db, exam):
         raise HTTPException(status_code=404, detail="Exam is not available for your class and section")
     existing = await db.submissions.find_one({
         "exam_id": exam_id, "student_id": student["_id"], "status": "in_progress",
