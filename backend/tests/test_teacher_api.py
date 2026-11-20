@@ -166,7 +166,10 @@ def test_teacher_can_grade_and_publish_one_student_result(teacher_context):
         "full_name": "Student Test", "role": "STUDENT", "is_active": True,
     })
     ctx["db"].exams.insert_one({
-        "_id": exam_id, "teacher_id": ctx["teacher_id"], "questions_snapshot": [
+        "_id": exam_id, "teacher_id": ctx["teacher_id"],
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"],
+        "questions_snapshot": [
             {"question_id": question_id, "question_text": "Q?", "options": ["A", "B"], "points": 5}
         ], "total_points": 5,
     })
@@ -256,6 +259,8 @@ def test_teacher_must_grade_every_question_before_publishing_result(teacher_cont
     })
     ctx["db"].exams.insert_one({
         "_id": exam_id, "teacher_id": ctx["teacher_id"],
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"],
         "questions_snapshot": [
             {"question_id": question_ids[0], "question_text": "Q1?", "options": ["A", "B"], "points": 2},
             {"question_id": question_ids[1], "question_text": "Q2?", "options": ["A", "B"], "points": 3},
