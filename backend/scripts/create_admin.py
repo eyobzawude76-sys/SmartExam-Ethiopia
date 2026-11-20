@@ -50,7 +50,7 @@ async def main():
             await db.users.insert_one({
                 "_id": str(uuid4()), "username": username, "full_name": full_name,
                 "password_hash": hash_password(password), "role": "ADMIN", "is_active": True,
-                "must_change_password": False, "created_at": datetime.now(timezone.utc),
+                "must_change_password": True, "created_at": datetime.now(timezone.utc),
             })
         except DuplicateKeyError:
             raise SystemExit("An Admin or that username already exists. Bootstrap was not completed.")
