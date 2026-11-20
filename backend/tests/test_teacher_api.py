@@ -298,3 +298,35 @@ def test_teacher_must_grade_every_question_before_publishing_result(teacher_cont
     assert valid_grade.status_code == 200, valid_grade.text
     assert valid_grade.json()["score"] == 2
     assert valid_grade.json()["total_points"] == 5
+
+
+def test_teacher_cannot_view_or_publish_exam_after_assignment_is_deactivated(teacher_context):
+    ctx = teacher_context
+    question = ctx["client"].post("/api/v1/teacher/questions", json={
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"], "question_text": "What is 7 + 1?",
+        "options": ["6", "7", "8", "9"], "correct_option": 2, "points": 1,
+    })
+    assert question.status_code == 201, question.text
+    exam = ctx["client"].post("/api/v1/teacher/exams", json={
+        "title": "Assignment lifecycle test", "subject_id": ctx["subject_id"],
+        "class_id": ctx["class_id"], "section_id": ctx["section_id"],
+        "question_ids": [question.json()["_id"]], "duration_minutes": 20,
+    })
+    assert exam.status_code == 201, exam.text
+    exam_id = exam.json()["_id"]
+
+    ctx["db"].teacher_assignments.update_one(
+        {"teacher_id": ctx["teacher_id"], "subject_id": ctx["subject_id"],
+         "class_id": ctx["class_id"], "section_id": ctx["section_id"]},
+        {"$set": {"is_active": False}},
+    )
+
+    listed = ctx["client"].get("/api/v1/teacher/exams")
+    assert listed.status_code == 200
+    assert all(item["_id"] != exam_id for item in listed.json())
+
+    publish = ctx["client"].post(f"/api/v1/teacher/exams/{exam_id}/publish")
+    assert publish.status_code == 403
+    stored = ctx["db"].exams.find_one({"_id": exam_id})
+    assert stored["status"] == "draft"
