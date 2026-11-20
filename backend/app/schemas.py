@@ -1,6 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
+from pydantic import BaseModel, ConfigDict, Field
 
 Role = Literal["ADMIN", "TEACHER", "STUDENT"]
 
@@ -17,19 +16,19 @@ class UserCreateInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class TeacherAssignmentInput(BaseModel):
+    subject_id: str
+    class_id: str
+    section_id: str
+
+
 class TeacherCreateInput(UserCreateInput):
-    assignments: list["TeacherAssignmentInput"] = Field(min_length=1, max_length=30)
+    assignments: list[TeacherAssignmentInput] = Field(min_length=1, max_length=30)
 
 
 class StudentCreateInput(UserCreateInput):
     class_id: str = Field(min_length=1)
     section_id: str = Field(min_length=1)
-
-
-class TeacherAssignmentInput(BaseModel):
-    subject_id: str
-    class_id: str
-    section_id: str
 
 
 class SubjectInput(BaseModel):
