@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -24,6 +24,7 @@ export default function StudentPage() {
   const [secondsLeft, setSecondsLeft] = useState(-1);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const answerSaveQueue = useRef<Promise<void>>(Promise.resolve());
 
   async function request(path: string, method = "GET", body?: unknown) {
     const response = await fetch(API + path, {
@@ -138,10 +139,14 @@ export default function StudentPage() {
     if (!activeExam) return;
     const next = { ...answers, [questionId]: selectedOption };
     setAnswers(next);
-    try {
+    // Serialize full-answer snapshots so a slower older request cannot overwrite a newer choice.
+    answerSaveQueue.current = answerSaveQueue.current.catch(() => undefined).then(async () => {
       await request(`/student/submissions/${activeExam.submissionId}/answers`, "PATCH", {
         answers: Object.entries(next).map(([question_id, selected_option]) => ({ question_id, selected_option })),
       });
+    });
+    try {
+      await answerSaveQueue.current;
     } catch (error) { setMessage(error instanceof Error ? error.message : "Answer save failed"); }
   }
 
@@ -149,6 +154,8 @@ export default function StudentPage() {
     if (!activeExam || busy) return;
     setBusy(true);
     try {
+      // Wait for all queued answer saves before final submission at the deadline.
+      await answerSaveQueue.current;
       await request(`/student/submissions/${activeExam.submissionId}/submit`, "POST");
       setActiveExam(null); setAnswers({});
       setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee submit ta'aniiru." : "Qormaata xumurteetta.");
