@@ -36,6 +36,10 @@ def student_context():
             "_id": str(uuid.uuid4()), "student_id": student_id,
             "class_id": class_id, "section_id": section_id, "is_active": True,
         })
+        db.users.insert_one({
+            "_id": teacher_id, "username": f"teacher_{uuid.uuid4().hex[:8]}",
+            "full_name": "Assigned Teacher", "role": "TEACHER", "is_active": True,
+        })
         question_id = str(uuid.uuid4())
         exam_id = str(uuid.uuid4())
         db.exams.insert_one({
@@ -143,6 +147,16 @@ def test_student_saved_answers_are_auto_submitted_after_deadline(student_context
     assert submission["answers"][0]["selected_option"] == 2
 
 
+
+
+def test_student_cannot_access_exam_when_assigned_teacher_is_inactive(student_context):
+    ctx = student_context
+    ctx["db"].users.update_one({"_id": ctx["teacher_id"]}, {"$set": {"is_active": False}})
+    listed = ctx["client"].get("/api/v1/student/exams")
+    assert listed.status_code == 200
+    assert listed.json() == []
+    started = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert started.status_code == 404
 
 def test_student_can_retake_only_when_teacher_allows_it(student_context):
     ctx = student_context
