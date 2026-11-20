@@ -154,7 +154,7 @@ async def list_students(db=Depends(get_db), _=Depends(require_admin)):
     ).sort("full_name", 1).to_list(5000)
     student_ids = [student["_id"] for student in students]
     enrollments = await db.student_enrollments.find(
-        {"student_id": {"$in": student_ids}, "is_active": True},
+        {"student_id": {"$in": student_ids}},
         {"_id": 0, "student_id": 1, "class_id": 1, "section_id": 1},
     ).to_list(5000)
     enrollment_by_student = {item["student_id"]: item for item in enrollments}
