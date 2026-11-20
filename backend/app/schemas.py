@@ -5,7 +5,7 @@ Role = Literal["ADMIN", "TEACHER", "STUDENT"]
 
 
 class LoginInput(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")
     password: str = Field(min_length=8, max_length=128)
 
 
@@ -32,16 +32,19 @@ class StudentCreateInput(UserCreateInput):
 
 
 class SubjectInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     name: str = Field(min_length=2, max_length=80)
     code: str = Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class ClassInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     name: str = Field(min_length=2, max_length=40)
 
 
 class SectionInput(BaseModel):
-    class_id: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+    class_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=20)
 
 
