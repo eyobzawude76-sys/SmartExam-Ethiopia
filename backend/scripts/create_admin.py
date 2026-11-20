@@ -5,6 +5,8 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ASCENDING
+from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password
 
 load_dotenv()
@@ -22,15 +24,24 @@ async def main():
     try:
         db = client[database_name]
         await db.users.create_index("username", unique=True)
+        await db.users.create_index(
+            [("role", ASCENDING)],
+            unique=True,
+            partialFilterExpression={"role": "ADMIN"},
+            name="single_admin_role",
+        )
         if await db.users.count_documents({"role": "ADMIN"}) > 0:
             raise SystemExit("An Admin already exists. Refusing to create another bootstrap Admin.")
         if await db.users.find_one({"username": username}):
             raise SystemExit("That username already exists.")
-        await db.users.insert_one({
-            "_id": str(uuid4()), "username": username, "full_name": full_name,
-            "password_hash": hash_password(password), "role": "ADMIN", "is_active": True,
-            "must_change_password": False, "created_at": datetime.now(timezone.utc),
-        })
+        try:
+            await db.users.insert_one({
+                "_id": str(uuid4()), "username": username, "full_name": full_name,
+                "password_hash": hash_password(password), "role": "ADMIN", "is_active": True,
+                "must_change_password": False, "created_at": datetime.now(timezone.utc),
+            })
+        except DuplicateKeyError:
+            raise SystemExit("An Admin or that username already exists. Bootstrap was not completed.")
         print("Admin account created successfully. Keep the credentials private.")
     finally:
         client.close()
