@@ -137,3 +137,7 @@ def test_teacher_can_grade_and_publish_one_student_result(teacher_context):
     published = ctx["client"].post(f"/api/v1/teacher/submissions/{submission_id}/publish-result")
     assert published.status_code == 200
     assert published.json()["result_published"] is True
+    cannot_change = ctx["client"].patch(f"/api/v1/teacher/submissions/{submission_id}/grade", json={
+        "grades": [{"question_id": question_id, "is_correct": False}],
+    })
+    assert cannot_change.status_code == 409
