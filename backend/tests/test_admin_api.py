@@ -16,8 +16,8 @@ from app.main import app
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password, verify_password
-from app.routes.admin import create_student, set_user_status
-from app.schemas import StudentCreateInput, UserStatusInput
+from app.routes.admin import create_student, create_teacher, set_user_status
+from app.schemas import StudentCreateInput, TeacherCreateInput, UserStatusInput
 
 
 @pytest.fixture
@@ -823,3 +823,73 @@ def test_student_creation_removes_account_when_enrollment_write_fails():
 
     assert db.users.documents == {}
     assert db.student_enrollments.cleanup_called is True
+
+
+
+def test_teacher_creation_cleans_up_partial_assignments_after_duplicate_key_failure():
+    class FakeUsers:
+        def __init__(self):
+            self.documents = {}
+
+        async def insert_one(self, document):
+            self.documents[document["_id"]] = document
+
+        async def delete_one(self, query):
+            self.documents.pop(query["_id"], None)
+
+    class FakeAcademicCollection:
+        async def find_one(self, query):
+            if query.get("is_active") is True:
+                if query.get("_id") == "subject-1":
+                    return {"_id": "subject-1", "is_active": True}
+                if query.get("_id") == "class-11":
+                    return {"_id": "class-11", "is_active": True}
+                if query.get("_id") == "section-a":
+                    return {"_id": "section-a", "class_id": "class-11", "is_active": True}
+            return None
+
+    class FakeAssignments:
+        def __init__(self):
+            self.documents = []
+            self.cleanup_called = False
+
+        async def insert_many(self, documents):
+            self.documents.append(documents[0])
+            raise DuplicateKeyError("simulated duplicate assignment")
+
+        async def delete_many(self, query):
+            self.documents = [
+                item for item in self.documents
+                if item.get("teacher_id") != query["teacher_id"]
+            ]
+            self.cleanup_called = True
+
+    class FakeDatabase:
+        def __init__(self):
+            self.users = FakeUsers()
+            self.teacher_assignments = FakeAssignments()
+            self.subjects = FakeAcademicCollection()
+            self.classes = FakeAcademicCollection()
+            self.sections = FakeAcademicCollection()
+
+        def __getitem__(self, name):
+            return getattr(self, name)
+
+    db = FakeDatabase()
+    payload = TeacherCreateInput(
+        username="teacher_partial_failure",
+        full_name="Teacher Partial Failure",
+        temporary_password="Teacher-Temporary-123!",
+        assignments=[
+            {"subject_id": "subject-1", "class_id": "class-11", "section_id": "section-a"},
+            {"subject_id": "subject-1", "class_id": "class-11", "section_id": "section-a-2"},
+        ],
+    )
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(create_teacher(payload, db=db, admin={"_id": "admin-1"}))
+
+    assert error.value.status_code == 409
+    assert db.users.documents == {}
+    assert db.teacher_assignments.documents == []
+    assert db.teacher_assignments.cleanup_called is True
