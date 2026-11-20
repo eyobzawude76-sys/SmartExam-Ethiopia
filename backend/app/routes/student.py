@@ -223,9 +223,16 @@ async def save_answers(submission_id: str, payload: StudentSaveAnswersInput,
     for answer in payload.answers:
         if answer.question_id not in valid_questions or answer.selected_option >= valid_questions[answer.question_id]:
             raise HTTPException(status_code=422, detail="Answer contains an invalid question or option")
-    await db.submissions.update_one({"_id": submission_id, "status": "in_progress"}, {
+    update_result = await db.submissions.update_one({
+        "_id": submission_id, "student_id": student["_id"], "status": "in_progress",
+    }, {
         "$set": {"answers": [item.model_dump() for item in payload.answers], "last_saved_at": current},
     })
+    if update_result.matched_count != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="This exam attempt has already been submitted. Answers were not changed.",
+        )
     return {"saved": len(payload.answers), "saved_at": current}
 
 
