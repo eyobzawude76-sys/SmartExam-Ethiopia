@@ -33,7 +33,7 @@ A role-based online examination system for Ethiopian secondary schools (Grades 1
 
 ## Development status
 
-Project initialized. Implementation will proceed in small, tested phases, starting with architecture and the Admin foundation.
+Admin phase: initial FastAPI authentication, Admin setup APIs, first-Admin bootstrap script, and `/admin` dashboard UI have been committed. Runtime verification against MongoDB and browser testing are still pending. Teacher implementation starts only after Admin is validated.
 
 ## Security
 
