@@ -25,6 +25,8 @@ async def _get_authenticated_user(
     user = await db.users.find_one({"_id": payload.get("sub"), "is_active": True}, {"password_hash": 0})
     if user is None or user.get("role") != payload.get("role"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is unavailable")
+    if payload.get("token_version", 0) != user.get("token_version", 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has been revoked")
     return user
 
 
