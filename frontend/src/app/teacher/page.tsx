@@ -25,6 +25,7 @@ export default function TeacherPage() {
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState("");
   const [selectedExamAssignment, setSelectedExamAssignment] = useState("");
+  const [selectedQuestionSource, setSelectedQuestionSource] = useState("");
   const [distributedExamIds, setDistributedExamIds] = useState<string[]>([]);
   const [questionText, setQuestionText] = useState("");
   const [options, setOptions] = useState(["", "", "", ""]);
@@ -64,6 +65,7 @@ export default function TeacherPage() {
       const firstKey = [first.subject_id, first.class_id, first.section_id].join("|");
       setSelectedAssignment(current => current || firstKey);
       setSelectedExamAssignment(current => current || firstKey);
+      setSelectedQuestionSource(current => current || firstKey);
     }
   }
 
@@ -195,7 +197,18 @@ export default function TeacherPage() {
     setBusy(true); setMessage("");
     const createdIds: string[] = [];
     try {
-      for (const target of examTargets) {
+      if (selectedExamAssignment === "__ALL__") {
+        const source = assignments.find(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedQuestionSource);
+        if (!source) throw new Error("Question source assignment filadhu.");
+        const result = await request("/teacher/exams/distribute", "POST", {
+          title: examTitle,
+          source_assignment: { subject_id: source.subject_id, class_id: source.class_id, section_id: source.section_id },
+          target_assignments: examTargets.map(a => ({ subject_id: a.subject_id, class_id: a.class_id, section_id: a.section_id })),
+          question_ids: examQuestions, duration_minutes: Number(duration), allow_retakes: allowRetakes,
+        });
+        createdIds.push(...result.created_exam_ids);
+      } else {
+        const target = examTargets[0];
         const created = await request("/teacher/exams", "POST", {
           title: examTitle, subject_id: target.subject_id, class_id: target.class_id,
           section_id: target.section_id, question_ids: examQuestions,
@@ -330,8 +343,9 @@ export default function TeacherPage() {
             <label>Exam title<input value={examTitle} onChange={e=>setExamTitle(e.target.value)} minLength={3} required /></label>
             <label>Duration (minutes)<input type="number" min="1" max="300" value={duration} onChange={e=>setDuration(e.target.value)} required /></label>
             <label className="inline-check"><input type="checkbox" checked={allowRetakes} onChange={e=>setAllowRetakes(e.target.checked)} /> Allow retakes</label>
-            <p className="muted">Choose questions. Qormaata assignment hundaaf yoo ergitu, gaaffileen kun assignment hunda keessatti jiraachuu qabu.</p>
-            {questions.filter(q=>q.subject_id===assignmentParts[0] && q.class_id===assignmentParts[1] && q.section_id===assignmentParts[2]).map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
+            {selectedExamAssignment === "__ALL__" && <label>Question Source Assignment<select value={selectedQuestionSource} onChange={e=>{setSelectedQuestionSource(e.target.value);setExamQuestions([]);}}>{assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}</select></label>}
+            <p className="muted">Gaaffilee assignment source filatame keessaa filadhu. Sirni isaanii qormaata Assignment hundaaf adda addaan uuma.</p>
+            {questions.filter(q=>q.subject_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[0]:assignmentParts[0]) && q.class_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[1]:assignmentParts[1]) && q.section_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[2]:assignmentParts[2])).map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
             <button disabled={busy || !examTargets.length || !examQuestions.length}>Create exam draft</button>
             {selectedExamAssignment === "__ALL__" && <p className="muted">Hubadhu: gaaffileen filataman assignment hunda keessatti yoo hin jirre, qormaanni assignment tokko irratti qofa uumamuu danda'a; ergaan milkaa'ina/hanqina ifatti ni mul'ata.</p>}
           </form>
