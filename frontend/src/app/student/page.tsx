@@ -44,6 +44,20 @@ export default function StudentPage() {
     setResults(published);
   }
 
+  async function submitExam(automatic = false) {
+    if (!activeExam || busy) return;
+    setBusy(true);
+    try {
+      // Wait for all queued answer saves before final submission at the deadline.
+      await answerSaveQueue.current;
+      await request(`/student/submissions/${activeExam.submissionId}/submit`, "POST");
+      setActiveExam(null); setAnswers({});
+      setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee submit ta'aniiru." : "Qormaata xumurteetta.");
+      await refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Submit failed"); }
+    finally { setBusy(false); }
+  }
+
   useEffect(() => {
     const saved = window.sessionStorage.getItem("smartExamStudentToken");
     const changeRequired = window.sessionStorage.getItem("smartExamStudentMustChangePassword") === "true";
@@ -148,20 +162,6 @@ export default function StudentPage() {
     try {
       await answerSaveQueue.current;
     } catch (error) { setMessage(error instanceof Error ? error.message : "Answer save failed"); }
-  }
-
-  async function submitExam(automatic = false) {
-    if (!activeExam || busy) return;
-    setBusy(true);
-    try {
-      // Wait for all queued answer saves before final submission at the deadline.
-      await answerSaveQueue.current;
-      await request(`/student/submissions/${activeExam.submissionId}/submit`, "POST");
-      setActiveExam(null); setAnswers({});
-      setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee submit ta'aniiru." : "Qormaata xumurteetta.");
-      await refresh();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Submit failed"); }
-    finally { setBusy(false); }
   }
 
   const timeText = `${Math.floor(secondsLeft / 60).toString().padStart(2, "0")}:${(secondsLeft % 60).toString().padStart(2, "0")}`;
