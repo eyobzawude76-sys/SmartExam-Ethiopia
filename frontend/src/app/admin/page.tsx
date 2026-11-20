@@ -79,7 +79,7 @@ export default function AdminPage() {
 
   async function submit(event: FormEvent, path: string, body: unknown, success: string, reset?: () => void) {
     event.preventDefault(); setBusy(true); setMessage("");
-    try { await request(path, "POST", body); reset?.(); await refresh(); setMessage(success); }
+    try { const result = await request(path, "POST", body); reset?.(); await refresh(); setMessage(result.temporary_password_once ? `${success} Username: ${result.teacher?.username ?? result.student?.username}. Temporary password (save it now): ${result.temporary_password_once}` : success); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Request failed"); }
     finally { setBusy(false); }
   }
