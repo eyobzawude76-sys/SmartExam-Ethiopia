@@ -346,7 +346,7 @@ export default function TeacherPage() {
             <p className="muted">Gaaffilee assignment source filatame keessaa filadhu. Sirni isaanii qormaata Assignment hundaaf adda addaan uuma.</p>
             {questions.filter(q=>q.subject_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[0]:assignmentParts[0]) && q.class_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[1]:assignmentParts[1]) && q.section_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[2]:assignmentParts[2])).map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
             <button disabled={busy || !examTargets.length || !examQuestions.length}>Create exam draft</button>
-            {selectedExamAssignment === "__ALL__" && <p className="muted">Hubadhu: gaaffileen filataman assignment hunda keessatti yoo hin jirre, qormaanni assignment tokko irratti qofa uumamuu danda'a; ergaan milkaa'ina/hanqina ifatti ni mul'ata.</p>}
+            {selectedExamAssignment === "__ALL__" && <p className="muted">Hubadhu: gaaffileen source assignment irraa filataman assignment hundaaf copy ta'u.</p>}
           </form>
         </article>
       </section>
