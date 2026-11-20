@@ -223,17 +223,38 @@ async def save_answers(submission_id: str, payload: StudentSaveAnswersInput,
     for answer in payload.answers:
         if answer.question_id not in valid_questions or answer.selected_option >= valid_questions[answer.question_id]:
             raise HTTPException(status_code=422, detail="Answer contains an invalid question or option")
+    # Re-check the deadline immediately before writing. The initial read and
+    # answer validation may take long enough for the exam deadline to pass.
+    write_time = now()
     update_result = await db.submissions.update_one({
         "_id": submission_id, "student_id": student["_id"], "status": "in_progress",
+        "deadline_at": {"$gt": write_time},
     }, {
-        "$set": {"answers": [item.model_dump() for item in payload.answers], "last_saved_at": current},
+        "$set": {"answers": [item.model_dump() for item in payload.answers], "last_saved_at": write_time},
     })
     if update_result.matched_count != 1:
+        latest = await db.submissions.find_one({
+            "_id": submission_id, "student_id": student["_id"], "status": "in_progress",
+        })
+        if latest and as_utc(latest["deadline_at"]) <= write_time:
+            await db.submissions.update_one({
+                "_id": submission_id, "student_id": student["_id"], "status": "in_progress",
+                "deadline_at": {"$lte": write_time},
+            }, {
+                "$set": {
+                    "status": "submitted", "submitted_at": as_utc(latest["deadline_at"]),
+                    "auto_submitted": True,
+                },
+            })
+            raise HTTPException(
+                status_code=409,
+                detail="Time ended. Saved answers were submitted automatically.",
+            )
         raise HTTPException(
             status_code=409,
             detail="This exam attempt has already been submitted. Answers were not changed.",
         )
-    return {"saved": len(payload.answers), "saved_at": current}
+    return {"saved": len(payload.answers), "saved_at": write_time}
 
 
 @router.post("/submissions/{submission_id}/submit")
