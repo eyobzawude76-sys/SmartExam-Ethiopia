@@ -17,10 +17,22 @@ Copy-Item .env.example .env
 ```
 
 Edit `.env` before starting:
+- Set `APP_ENV=development` for local development (the environment setting is required).
 - Set a unique `JWT_SECRET_KEY` with at least 32 characters.
 - Set the correct private `MONGODB_URI` and database name.
 - Set `ADMIN_USERNAME`, `ADMIN_FULL_NAME`, and a strong `ADMIN_PASSWORD` (12+ characters).
 - Never commit `.env` or share its values.
+
+### Hosted production environment
+
+Configure these as private backend environment variables in the hosting provider (never in frontend/public variables):
+- `APP_ENV=production` — required; the API will not start if the environment is omitted.
+- `JWT_SECRET_KEY` — generate a unique random secret of at least 32 characters; do not use the example value.
+- `MONGODB_URI` and `MONGODB_DATABASE` — use the production database and a private connection string.
+- `FRONTEND_ORIGIN` — the exact HTTPS origin of the deployed Next.js frontend (for example, `https://your-app.example`, with no path).
+- Set `ACCESS_TOKEN_EXPIRE_MINUTES` to the session lifetime you intend to use.
+
+The API rejects a placeholder JWT secret and non-HTTPS frontend origin in production. The repository does not contain or verify the hosting provider's live environment variables; verify these settings in the provider dashboard before deployment.
 
 ## 3. Create the first Admin
 Run once from the `backend/` directory:
