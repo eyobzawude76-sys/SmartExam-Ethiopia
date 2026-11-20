@@ -150,7 +150,7 @@ def test_student_can_take_exam_copied_to_their_assignment(student_context):
     ctx["db"].exams.insert_one({
         "_id": copied_exam_id, "teacher_id": ctx["teacher_id"],
         "title": "Distributed Mathematics Test",
-        "subject_id": str(uuid.uuid4()), "class_id": ctx["class_id"],
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
         "section_id": ctx["section_id"], "status": "published",
         "duration_minutes": 25, "starts_at": None, "ends_at": None,
         "allow_retakes": False, "total_points": 3,
