@@ -13,7 +13,7 @@ async def login(payload: LoginInput, db=Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     token = create_access_token(user["_id"], user["role"])
     return {"access_token": token, "token_type": "bearer", "user": {
-        "id": user["_id"], "username": user["username"], "full_name": user["full_name"], "role": user["role"]
+        "id": user["_id"], "username": user["username"], "full_name": user["full_name"], "role": user["role"], "must_change_password": user.get("must_change_password", False)
     }}
 
 
