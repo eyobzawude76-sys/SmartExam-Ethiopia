@@ -87,8 +87,23 @@ export default function AdminPage() {
 
   async function submit(event: FormEvent, path: string, body: unknown, success: string, reset?: () => void) {
     event.preventDefault(); setBusy(true); setMessage("");
-    try { const result = await request(path, "POST", body); reset?.(); await refresh(); setMessage(result.temporary_password_once ? `${success} Username: ${result.teacher?.username ?? result.student?.username}. Temporary password (save it now): ${result.temporary_password_once}` : success); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Request failed"); }
+    try {
+      const result = await request(path, "POST", body);
+      reset?.();
+      const successMessage = result.temporary_password_once
+        ? `${success} Username: ${result.teacher?.username ?? result.student?.username}. Temporary password (save it now): ${result.temporary_password_once}`
+        : success;
+      // Show one-time credentials immediately; a later dashboard refresh must not hide them.
+      setMessage(successMessage);
+      try {
+        await refresh();
+      } catch (refreshError) {
+        const detail = refreshError instanceof Error ? refreshError.message : "Unknown refresh error";
+        setMessage(`${successMessage} Dashboard refresh failed: ${detail}. The account creation request succeeded.`);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Request failed");
+    }
     finally { setBusy(false); }
   }
 
