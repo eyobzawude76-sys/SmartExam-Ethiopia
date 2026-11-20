@@ -179,7 +179,7 @@ def test_admin_to_teacher_to_student_exam_and_published_result_lifecycle():
         submission_id = started.json()["submission_id"]
         assert "correct_option" not in started.json()["questions"][0]
 
-        saved = client.put(
+        saved = client.patch(
             f"/api/v1/student/submissions/{submission_id}/answers",
             headers=student_headers,
             json={"answers": [{"question_id": question_id, "selected_option": 1}]},
