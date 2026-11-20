@@ -170,7 +170,7 @@ async def create_exam(payload: TeacherExamInput, db=Depends(get_db),
 
 @router.get("/exams")
 async def list_exams(db=Depends(get_db), teacher=Depends(teacher_account)):
-    return await db.exams.find({"teacher_id": teacher["_id"]}, {"questions_snapshot": 0}).sort("created_at", -1).to_list(500)
+    return await db.exams.find({"teacher_id": teacher["_id"]}).sort("created_at", -1).to_list(500)
 
 
 @router.post("/exams/{exam_id}/publish")
