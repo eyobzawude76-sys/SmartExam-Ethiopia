@@ -143,6 +143,23 @@ def test_student_saved_answers_are_auto_submitted_after_deadline(student_context
     assert submission["answers"][0]["selected_option"] == 2
 
 
+
+def test_student_can_retake_only_when_teacher_allows_it(student_context):
+    ctx = student_context
+    ctx["db"].exams.update_one({"_id": ctx["exam_id"]}, {"$set": {"allow_retakes": True}})
+    first = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert first.status_code == 200
+    first_id = first.json()["submission_id"]
+    submitted = ctx["client"].post(f"/api/v1/student/submissions/{first_id}/submit")
+    assert submitted.status_code == 200
+
+    second = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert second.status_code == 200, second.text
+    second_id = second.json()["submission_id"]
+    assert second_id != first_id
+    second_record = ctx["db"].submissions.find_one({"_id": second_id})
+    assert second_record["attempt_number"] == 2
+
 def test_teacher_cannot_access_student_endpoints(student_context):
     response = student_context["client"].get("/api/v1/teacher/dashboard")
     assert response.status_code == 403
