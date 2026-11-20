@@ -357,17 +357,19 @@ export default function TeacherPage() {
         {submissions.map(sub=><article className="submission-card" key={sub._id}>
           <h3>{sub.student?.full_name ?? "Student"} (@{sub.student?.username ?? ""})</h3>
           <p className="muted">Status: {sub.status} · {sub.score ?? "—"} / {sub.total_points ?? "—"} · Result {sub.result_published ? "Published" : "Not published"}</p>
-          {selectedExam.questions_snapshot?.map(q=>{
-            const answer = sub.answers?.find(item=>item.question_id===q.question_id);
-            const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
-            return <div className="grade-row" key={q.question_id}>
-            <span>{q.question_text}<small>Correct answer: {q.options[q.correct_option] ?? "Unavailable"} · Student answer: {answerLabel} · {q.points} points</small></span>
-            <select value={grading[sub._id]?.[q.question_id] === undefined ? "" : String(grading[sub._id][q.question_id])} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
-              <option value="">Choose ✓ / X</option><option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
-            </select>
-          </div>})}
-          {sub.status!=="graded" && <button disabled={busy} onClick={()=>gradeStudent(sub)}>Save marks</button>}
-          {sub.status==="graded" && !sub.result_published && <button disabled={busy} onClick={()=>publishResult(sub)}>Publish this student&apos;s result</button>}
+          {sub.status==="in_progress" ? <p className="muted">Barataan qormaata isaa hojjechaa jira. Erga submit godhee booda qofa grade gochuu dandeessa.</p> : <>
+            {selectedExam.questions_snapshot?.map(q=>{
+              const answer = sub.answers?.find(item=>item.question_id===q.question_id);
+              const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
+              return <div className="grade-row" key={q.question_id}>
+              <span>{q.question_text}<small>Correct answer: {q.options[q.correct_option] ?? "Unavailable"} · Student answer: {answerLabel} · {q.points} points</small></span>
+              <select value={grading[sub._id]?.[q.question_id] === undefined ? "" : String(grading[sub._id][q.question_id])} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
+                <option value="">Choose ✓ / X</option><option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
+              </select>
+            </div>})}
+            {sub.status==="submitted" && <button disabled={busy} onClick={()=>gradeStudent(sub)}>Save marks</button>}
+            {sub.status==="graded" && !sub.result_published && <button disabled={busy} onClick={()=>publishResult(sub)}>Publish this student&apos;s result</button>}
+          </>}
         </article>)}
       </section>}
     </main>
