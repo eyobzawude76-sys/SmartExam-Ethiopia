@@ -111,3 +111,88 @@ def test_password_hash_is_not_plaintext():
     assert hashed != password
     assert verify_password(password, hashed)
     assert not verify_password("wrong-password", hashed)
+
+
+def test_inactive_user_cannot_login(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    username = f"inactive_{uuid.uuid4().hex[:8]}"
+    password = "Inactive-User-Password-123!"
+    db.users.insert_one({
+        "_id": str(uuid.uuid4()), "username": username, "full_name": "Inactive Teacher",
+        "password_hash": hash_password(password), "role": "TEACHER", "is_active": False,
+    })
+    response = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert response.status_code == 401
+    db.users.delete_many({"username": username})
+    mongo.close()
+
+
+def test_admin_can_deactivate_teacher_and_block_existing_token(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    username = f"active_{uuid.uuid4().hex[:8]}"
+    password = "Active-Teacher-Password-123!"
+    teacher_id = str(uuid.uuid4())
+    db.users.insert_one({
+        "_id": teacher_id, "username": username, "full_name": "Active Teacher",
+        "password_hash": hash_password(password), "role": "TEACHER", "is_active": True,
+    })
+    login = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    changed = client.patch(f"/api/v1/admin/users/{teacher_id}/status", json={"is_active": False})
+    assert changed.status_code == 200, changed.text
+    blocked = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert blocked.status_code == 401
+    db.users.delete_many({"_id": teacher_id})
+    mongo.close()
+
+
+def test_duplicate_username_is_rejected(client):
+    username = f"duplicate_{uuid.uuid4().hex[:8]}"
+    body = {
+        "full_name": "Teacher One", "username": username,
+        "temporary_password": "Teacher-Temp-Password-123!",
+        "assignments": [],
+    }
+    first = client.post("/api/v1/admin/teachers", json=body)
+    assert first.status_code == 201, first.text
+    second = client.post("/api/v1/admin/teachers", json=body)
+    assert second.status_code == 409
+
+
+def test_duplicate_teacher_assignment_is_rejected(client):
+    subject = client.post("/api/v1/admin/subjects", json={"name": "Physics", "code": f"PHY{uuid.uuid4().hex[:4].upper()}"})
+    assert subject.status_code == 201, subject.text
+    class_response = client.post("/api/v1/admin/classes", json={"name": f"Grade 11 {uuid.uuid4().hex[:4]}"})
+    assert class_response.status_code == 201, class_response.text
+    class_id = class_response.json()["id"]
+    section = client.post("/api/v1/admin/sections", json={"class_id": class_id, "name": "A"})
+    assert section.status_code == 201, section.text
+    assignment = {"subject_id": subject.json()["id"], "class_id": class_id, "section_id": section.json()["id"]}
+    body = {
+        "full_name": "Duplicate Assignment Teacher",
+        "username": f"dupassign_{uuid.uuid4().hex[:8]}",
+        "temporary_password": "Teacher-Temp-Password-123!",
+        "assignments": [assignment, assignment],
+    }
+    response = client.post("/api/v1/admin/teachers", json=body)
+    assert response.status_code == 422
+
+
+def test_student_cannot_access_admin_dashboard(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    username = f"student_role_{uuid.uuid4().hex[:8]}"
+    password = "Student-Role-Password-123!"
+    db.users.insert_one({
+        "_id": str(uuid.uuid4()), "username": username, "full_name": "Student",
+        "password_hash": hash_password(password), "role": "STUDENT", "is_active": True,
+    })
+    login = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert login.status_code == 200
+    denied = client.get("/api/v1/admin/dashboard", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
+    assert denied.status_code == 403
+    db.users.delete_many({"username": username})
+    mongo.close()
