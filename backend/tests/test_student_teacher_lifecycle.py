@@ -52,25 +52,46 @@ def test_student_teacher_exam_to_published_result_lifecycle():
             "section_id": section_id, "is_active": True,
         })
 
-        exam_id, question_id = str(uuid.uuid4()), str(uuid.uuid4())
-        db.exams.insert_one({
-            "_id": exam_id, "teacher_id": teacher_id, "title": "Lifecycle Exam",
-            "subject_id": subject_id, "class_id": class_id, "section_id": section_id,
-            "status": "published", "duration_minutes": 30, "starts_at": None,
-            "ends_at": None, "allow_retakes": False, "total_points": 5,
-            "questions_snapshot": [{
-                "question_id": question_id, "question_text": "2 + 2 = ?",
-                "options": ["3", "4", "5", "6"], "correct_option": 1, "points": 5,
-            }],
+        teacher_login = client.post("/api/v1/auth/login", json={
+            "username": teacher_username, "password": teacher_password,
         })
+        assert teacher_login.status_code == 200, teacher_login.text
+        teacher_token = teacher_login.json()["access_token"]
+        client.headers.update({"Authorization": f"Bearer {teacher_token}"})
+
+        question = client.post("/api/v1/teacher/questions", json={
+            "subject_id": subject_id, "class_id": class_id, "section_id": section_id,
+            "question_text": "2 + 2 = ?", "options": ["3", "4", "5", "6"],
+            "correct_option": 1, "points": 5,
+        })
+        assert question.status_code == 201, question.text
+        question_id = question.json()["_id"]
+        assert "correct_option" not in question.json()
+
+        exam = client.post("/api/v1/teacher/exams", json={
+            "title": "Lifecycle Exam", "subject_id": subject_id,
+            "class_id": class_id, "section_id": section_id,
+            "question_ids": [question_id], "duration_minutes": 30,
+        })
+        assert exam.status_code == 201, exam.text
+        exam_id = exam.json()["_id"]
+        assert exam.json()["status"] == "draft"
+
+        published_exam = client.post(f"/api/v1/teacher/exams/{exam_id}/publish")
+        assert published_exam.status_code == 200, published_exam.text
+        assert published_exam.json()["status"] == "published"
 
         student_login = client.post("/api/v1/auth/login", json={
             "username": student_username, "password": student_password,
         })
         assert student_login.status_code == 200, student_login.text
-        client.headers.update({
-            "Authorization": f"Bearer {student_login.json()['access_token']}"
-        })
+        student_token = student_login.json()["access_token"]
+        client.headers.update({"Authorization": f"Bearer {student_token}"})
+
+        available = client.get("/api/v1/student/exams")
+        assert available.status_code == 200, available.text
+        assert any(item["id"] == exam_id for item in available.json())
+
         started = client.post(f"/api/v1/student/exams/{exam_id}/start")
         assert started.status_code == 200, started.text
         submission_id = started.json()["submission_id"]
@@ -80,13 +101,7 @@ def test_student_teacher_exam_to_published_result_lifecycle():
         assert submitted.status_code == 200, submitted.text
         assert client.get("/api/v1/student/results").json() == []
 
-        teacher_login = client.post("/api/v1/auth/login", json={
-            "username": teacher_username, "password": teacher_password,
-        })
-        assert teacher_login.status_code == 200, teacher_login.text
-        client.headers.update({
-            "Authorization": f"Bearer {teacher_login.json()['access_token']}"
-        })
+        client.headers.update({"Authorization": f"Bearer {teacher_token}"})
         graded = client.patch(
             f"/api/v1/teacher/submissions/{submission_id}/grade",
             json={"grades": [{"question_id": question_id, "is_correct": True}]},
@@ -94,22 +109,16 @@ def test_student_teacher_exam_to_published_result_lifecycle():
         assert graded.status_code == 200, graded.text
         assert graded.json()["score"] == 5
 
-        client.headers.update({
-            "Authorization": f"Bearer {student_login.json()['access_token']}"
-        })
+        client.headers.update({"Authorization": f"Bearer {student_token}"})
         assert client.get("/api/v1/student/results").json() == []
 
-        client.headers.update({
-            "Authorization": f"Bearer {teacher_login.json()['access_token']}"
-        })
-        published = client.post(
+        client.headers.update({"Authorization": f"Bearer {teacher_token}"})
+        published_result = client.post(
             f"/api/v1/teacher/submissions/{submission_id}/publish-result"
         )
-        assert published.status_code == 200, published.text
+        assert published_result.status_code == 200, published_result.text
 
-        client.headers.update({
-            "Authorization": f"Bearer {student_login.json()['access_token']}"
-        })
+        client.headers.update({"Authorization": f"Bearer {student_token}"})
         results = client.get("/api/v1/student/results")
         assert results.status_code == 200, results.text
         assert len(results.json()) == 1
