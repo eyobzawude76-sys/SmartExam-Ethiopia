@@ -271,8 +271,8 @@ def test_teacher_csv_upload_rejects_malformed_rows_without_server_error(teacher_
     }
 
     short_row = (
-        "question_text,option_a,option_b,option_c,option_d,correct_option,points\\n"
-        "Question with missing option, A, B, C, ,C,1\\n"
+        "question_text,option_a,option_b,option_c,option_d,correct_option,points\n"
+        "Question with missing option, A, B, C, ,C,1\n"
     )
     response = ctx["client"].post(
         url, params=params, files={"file": ("short.csv", short_row, "text/csv")}
@@ -280,8 +280,8 @@ def test_teacher_csv_upload_rejects_malformed_rows_without_server_error(teacher_
     assert response.status_code == 422, response.text
 
     duplicate_headers = (
-        "question_text,option_a,option_b,option_c,option_c,correct_option,points\\n"
-        "Duplicate header question,A,B,C,D,C,1\\n"
+        "question_text,option_a,option_b,option_c,option_c,correct_option,points\n"
+        "Duplicate header question,A,B,C,D,C,1\n"
     )
     response = ctx["client"].post(
         url, params=params, files={"file": ("duplicate.csv", duplicate_headers, "text/csv")}
