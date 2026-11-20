@@ -41,3 +41,6 @@ async def create_indexes(db: AsyncIOMotorDatabase) -> None:
         unique=True,
     )
     await db.student_enrollments.create_index([("student_id", ASCENDING)], unique=True)
+    await db.questions.create_index([("teacher_id", ASCENDING), ("subject_id", ASCENDING), ("class_id", ASCENDING), ("section_id", ASCENDING)])
+    await db.exams.create_index([("teacher_id", ASCENDING), ("created_at", ASCENDING)])
+    await db.submissions.create_index([("exam_id", ASCENDING), ("teacher_id", ASCENDING), ("status", ASCENDING)])
