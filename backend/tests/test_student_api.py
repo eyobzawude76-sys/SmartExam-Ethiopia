@@ -15,6 +15,7 @@ os.environ.setdefault("FRONTEND_ORIGIN", "http://localhost:3000")
 
 from app.main import app
 from app.core.security import hash_password
+from app.routes import student as student_routes
 
 
 @pytest.fixture
@@ -271,6 +272,34 @@ def test_student_saved_answers_are_auto_submitted_after_deadline(student_context
 
 
 
+
+
+def test_student_answer_save_is_rejected_if_deadline_passes_during_validation(student_context, monkeypatch):
+    ctx = student_context
+    started = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert started.status_code == 200
+    submission_id = started.json()["submission_id"]
+    original_answer = {"question_id": ctx["question_id"], "selected_option": 2}
+    ctx["db"].submissions.update_one(
+        {"_id": submission_id},
+        {"$set": {"answers": [original_answer]}},
+    )
+
+    before_deadline = datetime.now(timezone.utc)
+    after_deadline = before_deadline + timedelta(minutes=1)
+    times = iter([before_deadline, after_deadline])
+    monkeypatch.setattr(student_routes, "now", lambda: next(times))
+
+    response = ctx["client"].patch(
+        f"/api/v1/student/submissions/{submission_id}/answers",
+        json={"answers": [{"question_id": ctx["question_id"], "selected_option": 1}]},
+    )
+    assert response.status_code == 409
+    assert "Time ended" in response.json()["detail"]
+    record = ctx["db"].submissions.find_one({"_id": submission_id})
+    assert record["status"] == "submitted"
+    assert record["auto_submitted"] is True
+    assert record["answers"] == [original_answer]
 
 
 def test_student_exam_respects_scheduled_start_and_end_deadlines(student_context):
