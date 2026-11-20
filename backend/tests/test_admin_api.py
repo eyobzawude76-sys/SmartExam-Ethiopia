@@ -79,6 +79,9 @@ def test_admin_can_create_academic_structure_and_users(client):
     listed_students = client.get("/api/v1/admin/students")
     assert listed_students.status_code == 200
     assert all("password_hash" not in user for user in listed_students.json())
+    listed_student = next(user for user in listed_students.json() if user["_id"] == student.json()["student"]["_id"])
+    assert listed_student["class_id"] == class_id
+    assert listed_student["section_id"] == section_id
 
     listed = client.get("/api/v1/admin/teachers")
     assert listed.status_code == 200
