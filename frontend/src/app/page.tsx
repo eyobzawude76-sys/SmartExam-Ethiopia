@@ -22,7 +22,7 @@ export default function HomePage() {
             <p>Take exams assigned to your class and section, then view released results.</p>
           </article>
         </div>
-        <p className="notice">Admin: <a href="/admin">Open Admin Dashboard</a> · Teacher: <a href="/teacher">Open Teacher Dashboard</a>.</p>
+        <p className="notice">Admin: <a href="/admin">Open Admin Dashboard</a> · Teacher: <a href="/teacher">Open Teacher Dashboard</a> · Student: <a href="/student">Open Student Dashboard</a>.</p>
       </section>
     </main>
   );
