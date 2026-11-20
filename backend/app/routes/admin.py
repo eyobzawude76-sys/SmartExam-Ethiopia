@@ -148,7 +148,21 @@ async def list_teachers(db=Depends(get_db), _=Depends(require_admin)):
 
 @router.get("/students")
 async def list_students(db=Depends(get_db), _=Depends(require_admin)):
-    return await db.users.find({"role": "STUDENT"}, {"password_hash": 0}).sort("full_name", 1).to_list(5000)
+    students = await db.users.find(
+        {"role": "STUDENT"},
+        {"password_hash": 0},
+    ).sort("full_name", 1).to_list(5000)
+    student_ids = [student["_id"] for student in students]
+    enrollments = await db.student_enrollments.find(
+        {"student_id": {"$in": student_ids}, "is_active": True},
+        {"_id": 0, "student_id": 1, "class_id": 1, "section_id": 1},
+    ).to_list(5000)
+    enrollment_by_student = {item["student_id"]: item for item in enrollments}
+    for student in students:
+        enrollment = enrollment_by_student.get(student["_id"])
+        student["class_id"] = enrollment["class_id"] if enrollment else None
+        student["section_id"] = enrollment["section_id"] if enrollment else None
+    return students
 
 
 @router.get("/teachers/{teacher_id}/assignments")
