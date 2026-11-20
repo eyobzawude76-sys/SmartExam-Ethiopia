@@ -71,12 +71,16 @@ export default function AdminPage() {
     const saved = window.sessionStorage.getItem("smartExamAdminToken");
     const passwordChangeRequired = window.sessionStorage.getItem("smartExamAdminMustChangePassword") === "true";
     if (saved) {
+      // This effect restores authentication state from sessionStorage after client hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMustChangePassword(passwordChangeRequired);
       setToken(saved);
     }
   }, []);
 
   useEffect(() => {
+    // Authentication changes trigger the protected dashboard refresh; clear invalid sessions on failure.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (token && !mustChangePassword) refresh().catch((error) => { setMessage(error.message); setToken(""); window.sessionStorage.removeItem("smartExamAdminToken"); window.sessionStorage.removeItem("smartExamAdminMustChangePassword"); });
     // Refresh only when authentication changes or the required password change is completed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
