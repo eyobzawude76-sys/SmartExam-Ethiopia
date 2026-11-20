@@ -148,8 +148,17 @@ def test_admin_can_deactivate_teacher_and_block_existing_token(client):
     login = client.post("/api/v1/auth/login", json={"username": username, "password": password})
     assert login.status_code == 200
     token = login.json()["access_token"]
+    # Create an assignment and verify deactivation also disables it.
+    subject = client.post("/api/v1/admin/subjects", json={"name": "History", "code": f"HIS{uuid.uuid4().hex[:5].upper()}"})
+    class_response = client.post("/api/v1/admin/classes", json={"name": f"Grade 6 {uuid.uuid4().hex[:5]}"})
+    section = client.post("/api/v1/admin/sections", json={"class_id": class_response.json()["id"], "name": "A"})
+    assignment = client.post(f"/api/v1/admin/teachers/{teacher_id}/assignments", json={
+        "subject_id": subject.json()["id"], "class_id": class_response.json()["id"], "section_id": section.json()["id"]
+    })
+    assert assignment.status_code == 201, assignment.text
     changed = client.patch(f"/api/v1/admin/users/{teacher_id}/status", json={"is_active": False})
     assert changed.status_code == 200, changed.text
+    assert db.teacher_assignments.count_documents({"teacher_id": teacher_id, "is_active": True}) == 0
     blocked = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert blocked.status_code == 401
     db.users.delete_many({"_id": teacher_id})
