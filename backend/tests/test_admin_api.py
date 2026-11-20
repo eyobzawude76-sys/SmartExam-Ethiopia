@@ -16,8 +16,8 @@ from app.main import app
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password, verify_password
-from app.routes.admin import set_user_status
-from app.schemas import UserStatusInput
+from app.routes.admin import create_student, set_user_status
+from app.schemas import StudentCreateInput, UserStatusInput
 
 
 @pytest.fixture
@@ -766,3 +766,60 @@ def test_status_update_reports_incomplete_recovery_when_rollback_fails():
     assert "recovery was incomplete" in error.value.detail
     assert db.users.status is False
 
+
+
+
+def test_student_creation_removes_account_when_enrollment_write_fails():
+    class FakeUsers:
+        def __init__(self):
+            self.documents = {}
+
+        async def insert_one(self, document):
+            self.documents[document["_id"]] = document
+
+        async def delete_one(self, query):
+            self.documents.pop(query["_id"], None)
+
+    class FakeAcademicCollection:
+        async def find_one(self, query):
+            if query.get("_id") == "class-11" and query.get("is_active") is True:
+                return {"_id": "class-11", "is_active": True}
+            if query.get("_id") == "section-a" and query.get("is_active") is True:
+                return {"_id": "section-a", "class_id": "class-11", "is_active": True}
+            return None
+
+    class FailingEnrollments:
+        def __init__(self):
+            self.cleanup_called = False
+
+        async def insert_one(self, _document):
+            raise RuntimeError("simulated enrollment write failure")
+
+        async def delete_many(self, query):
+            assert query == {"student_id": next(iter(db.users.documents), "missing")}
+            self.cleanup_called = True
+
+    class FakeDatabase:
+        def __init__(self):
+            self.users = FakeUsers()
+            self.student_enrollments = FailingEnrollments()
+            self.classes = FakeAcademicCollection()
+            self.sections = FakeAcademicCollection()
+
+        def __getitem__(self, name):
+            return getattr(self, name)
+
+    db = FakeDatabase()
+    payload = StudentCreateInput(
+        username="student_failure",
+        full_name="Student Failure",
+        temporary_password="Student-Temporary-123!",
+        class_id="class-11",
+        section_id="section-a",
+    )
+
+    with pytest.raises(RuntimeError, match="simulated enrollment write failure"):
+        asyncio.run(create_student(payload, db=db, admin={"_id": "admin-1"}))
+
+    assert db.users.documents == {}
+    assert db.student_enrollments.cleanup_called is True
