@@ -563,6 +563,47 @@ def test_admin_cannot_add_assignment_to_inactive_teacher(client):
 
 
 
+
+def test_admin_deactivation_blocks_existing_student_token_and_reactivation_restores_access(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    student_id = str(uuid.uuid4())
+    username = f"token_student_{uuid.uuid4().hex[:8]}"
+    password = "Token-Student-Password-123!"
+    db.users.insert_one({
+        "_id": student_id,
+        "username": username,
+        "full_name": "Token Lifecycle Student",
+        "password_hash": hash_password(password),
+        "role": "STUDENT",
+        "is_active": True,
+        "must_change_password": False,
+    })
+
+    login = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert login.status_code == 200, login.text
+    token_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/api/v1/auth/me", headers=token_headers).status_code == 200
+
+    deactivated = client.patch(
+        f"/api/v1/admin/users/{student_id}/status",
+        json={"is_active": False},
+    )
+    assert deactivated.status_code == 200, deactivated.text
+    blocked = client.get("/api/v1/auth/me", headers=token_headers)
+    assert blocked.status_code == 401
+
+    reactivated = client.patch(
+        f"/api/v1/admin/users/{student_id}/status",
+        json={"is_active": True},
+    )
+    assert reactivated.status_code == 200, reactivated.text
+    restored = client.get("/api/v1/auth/me", headers=token_headers)
+    assert restored.status_code == 200, restored.text
+
+    db.users.delete_one({"_id": student_id})
+    mongo.close()
+
 def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
     mongo = MongoClient(os.environ["MONGODB_URI"])
     db = mongo[os.environ["MONGODB_DATABASE"]]
