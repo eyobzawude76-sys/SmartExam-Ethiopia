@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from pymongo.errors import DuplicateKeyError
 from app.dependencies import get_db, get_current_user
 from app.student_schemas import StudentSaveAnswersInput
 
@@ -181,7 +182,21 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
         "started_at": current, "deadline_at": deadline, "submitted_at": None,
         "result_published": False, "attempt_number": attempts + 1,
     }
-    await db.submissions.insert_one(submission)
+    try:
+        await db.submissions.insert_one(submission)
+    except DuplicateKeyError:
+        # Another request created the active attempt after our initial lookup.
+        existing = await db.submissions.find_one({
+            "exam_id": exam_id, "student_id": student["_id"], "status": "in_progress",
+        })
+        if existing is None:
+            raise HTTPException(status_code=409, detail="An exam attempt is already being created. Please try again.")
+        if as_utc(existing["deadline_at"]) <= now():
+            raise HTTPException(status_code=409, detail="Exam time ended. Your saved answers were auto-submitted.")
+        return {
+            "submission_id": existing["_id"], "deadline_at": as_utc(existing["deadline_at"]),
+            "questions": student_questions(exam), "answers": existing.get("answers", []),
+        }
     return {
         "submission_id": submission_id, "deadline_at": deadline,
         "questions": student_questions(exam), "answers": [],
