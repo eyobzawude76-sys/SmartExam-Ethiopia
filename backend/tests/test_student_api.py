@@ -302,6 +302,20 @@ def test_student_cannot_access_exam_when_assigned_teacher_is_inactive(student_co
     started = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
     assert started.status_code == 404
 
+def test_student_cannot_retake_by_default_and_submitted_exam_disappears(student_context):
+    ctx = student_context
+    first = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert first.status_code == 200, first.text
+    first_id = first.json()["submission_id"]
+
+    submitted = ctx["client"].post(f"/api/v1/student/submissions/{first_id}/submit")
+    assert submitted.status_code == 200, submitted.text
+
+    second = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert second.status_code == 409
+    assert all(item["id"] != ctx["exam_id"] for item in ctx["client"].get("/api/v1/student/exams").json())
+
+
 def test_student_can_retake_only_when_teacher_allows_it(student_context):
     ctx = student_context
     ctx["db"].exams.update_one({"_id": ctx["exam_id"]}, {"$set": {"allow_retakes": True}})
