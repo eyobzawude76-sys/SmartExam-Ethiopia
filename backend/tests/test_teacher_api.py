@@ -372,3 +372,44 @@ def test_teacher_cannot_view_or_publish_exam_after_assignment_is_deactivated(tea
     )
     assert publish_result.status_code == 403
     assert ctx["db"].submissions.find_one({"_id": publish_submission_id})["result_published"] is False
+
+
+
+def test_teacher_distribution_rejects_unassigned_target_without_creating_partial_exams(teacher_context):
+    ctx = teacher_context
+    question = ctx["client"].post("/api/v1/teacher/questions", json={
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"], "question_text": "What is 9 + 1?",
+        "options": ["8", "9", "10", "11"], "correct_option": 2, "points": 1,
+    })
+    assert question.status_code == 201, question.text
+
+    unassigned_subject = str(uuid.uuid4())
+    unassigned_section = str(uuid.uuid4())
+    ctx["db"].subjects.insert_one({
+        "_id": unassigned_subject, "name": "Unassigned Subject",
+        "code": f"UN{uuid.uuid4().hex[:6]}", "is_active": True,
+    })
+    ctx["db"].sections.insert_one({
+        "_id": unassigned_section, "class_id": ctx["class_id"],
+        "name": f"11-{uuid.uuid4().hex[:3]}", "is_active": True,
+    })
+
+    response = ctx["client"].post("/api/v1/teacher/exams/distribute", json={
+        "title": "Must not partially distribute",
+        "source_assignment": {
+            "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+            "section_id": ctx["section_id"],
+        },
+        "target_assignments": [
+            {"subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+             "section_id": ctx["section_id"]},
+            {"subject_id": unassigned_subject, "class_id": ctx["class_id"],
+             "section_id": unassigned_section},
+        ],
+        "question_ids": [question.json()["_id"]],
+        "duration_minutes": 20,
+    })
+
+    assert response.status_code == 403
+    assert ctx["db"].exams.count_documents({"teacher_id": ctx["teacher_id"]}) == 0
