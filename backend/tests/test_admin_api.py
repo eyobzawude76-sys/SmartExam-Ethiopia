@@ -77,6 +77,8 @@ def test_bootstrap_admin_must_change_password_before_dashboard_access(client):
     })
     assert changed.status_code == 200, changed.text
     assert changed.json()["must_change_password"] is False
+    assert client.get("/api/v1/admin/dashboard").status_code == 401
+    client.headers["Authorization"] = "Bearer " + changed.json()["access_token"]
     assert client.get("/api/v1/admin/dashboard").status_code == 200
 
     old_login = client.post("/api/v1/auth/login", json={
@@ -211,6 +213,9 @@ def test_teacher_and_student_must_change_temporary_password_before_role_access(c
     assert changed_teacher.status_code == 200, changed_teacher.text
     assert client.get("/api/v1/teacher/dashboard", headers={
         "Authorization": f"Bearer {teacher_token}",
+    }).status_code == 401
+    assert client.get("/api/v1/teacher/dashboard", headers={
+        "Authorization": "Bearer " + changed_teacher.json()["access_token"],
     }).status_code == 200
 
     student_login = client.post("/api/v1/auth/login", json={
@@ -232,6 +237,9 @@ def test_teacher_and_student_must_change_temporary_password_before_role_access(c
     assert changed_student.status_code == 200, changed_student.text
     assert client.get("/api/v1/student/exams", headers={
         "Authorization": f"Bearer {student_token}",
+    }).status_code == 401
+    assert client.get("/api/v1/student/exams", headers={
+        "Authorization": "Bearer " + changed_student.json()["access_token"],
     }).status_code == 200
 
     teacher_relogin = client.post("/api/v1/auth/login", json={
