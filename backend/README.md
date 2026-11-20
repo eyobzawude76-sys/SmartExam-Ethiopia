@@ -1,4 +1,4 @@
-# Backend setup — Admin phase
+# SmartExam Ethiopia V1 — Backend setup
 
 ## 1. Requirements
 - Python 3.11+
@@ -57,7 +57,8 @@ Set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1` in the frontend envi
 
 ## Admin API endpoints
 All `/api/v1/admin/*` routes require a valid Admin JWT:
-- `POST /auth/login` and `POST /auth/change-password`\n- `GET /admin/dashboard`
+- `POST /auth/login` and `POST /auth/change-password`
+- `GET /admin/dashboard`
 - `GET|POST /admin/subjects`
 - `GET|POST /admin/classes`
 - `GET|POST /admin/sections`
