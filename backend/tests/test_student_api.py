@@ -432,3 +432,34 @@ def test_database_allows_only_one_active_attempt_per_student_exam(student_contex
     ctx["db"].submissions.insert_one({"_id": first_id, **base})
     with pytest.raises(DuplicateKeyError):
         ctx["db"].submissions.insert_one({"_id": second_id, **base})
+
+
+
+def test_student_cannot_read_or_mutate_another_students_submission(student_context):
+    ctx = student_context
+    other_student_id = str(uuid.uuid4())
+    other_submission_id = str(uuid.uuid4())
+    ctx["db"].users.insert_one({
+        "_id": other_student_id, "username": f"other_{uuid.uuid4().hex[:8]}",
+        "full_name": "Another Student", "password_hash": hash_password("Other-Student-Password-123!"),
+        "role": "STUDENT", "is_active": True, "must_change_password": False,
+    })
+    ctx["db"].submissions.insert_one({
+        "_id": other_submission_id, "exam_id": ctx["exam_id"],
+        "teacher_id": ctx["teacher_id"], "student_id": other_student_id,
+        "status": "in_progress", "deadline_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        "answers": [],
+    })
+
+    save = ctx["client"].patch(
+        f"/api/v1/student/submissions/{other_submission_id}/answers",
+        json={"answers": [{"question_id": ctx["question_id"], "selected_option": 1}]},
+    )
+    submit = ctx["client"].post(
+        f"/api/v1/student/submissions/{other_submission_id}/submit"
+    )
+    assert save.status_code == 404
+    assert submit.status_code == 404
+    other_record = ctx["db"].submissions.find_one({"_id": other_submission_id})
+    assert other_record["status"] == "in_progress"
+    assert other_record["answers"] == []
