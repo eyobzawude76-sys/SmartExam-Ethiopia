@@ -11,7 +11,7 @@ async def login(payload: LoginInput, db=Depends(get_db)):
     user = await db.users.find_one({"username": payload.username})
     if user is None or not user.get("is_active", False) or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
-    token = create_access_token(user["_id"], user["role"])
+    token = create_access_token(user["_id"], user["role"], user.get("token_version", 0))
     return {"access_token": token, "token_type": "bearer", "user": {
         "id": user["_id"], "username": user["username"], "full_name": user["full_name"], "role": user["role"], "must_change_password": user.get("must_change_password", False)
     }}
@@ -29,8 +29,13 @@ async def change_password(payload: PasswordChangeInput, user=Depends(get_user_fo
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
     if payload.current_password == payload.new_password:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="New password must be different")
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {"password_hash": hash_password(payload.new_password), "must_change_password": False}},
+    next_token_version = stored.get("token_version", 0) + 1
+    updated = await db.users.update_one(
+        {"_id": user["_id"], "password_hash": stored["password_hash"]},
+        {"$set": {"password_hash": hash_password(payload.new_password), "must_change_password": False},
+         "$inc": {"token_version": 1}},
     )
-    return {"message": "Password changed successfully", "must_change_password": False}
+    if updated.modified_count != 1:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Password was changed by another request. Please log in again.")
+    token = create_access_token(user["_id"], user["role"], next_token_version)
+    return {"message": "Password changed successfully", "must_change_password": False, "access_token": token, "token_type": "bearer"}
