@@ -582,6 +582,13 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
         "section_id": "section-11-a",
         "is_active": True,
     })
+    student_login = client.post("/api/v1/auth/login", json={
+        "username": db.users.find_one({"_id": student_id})["username"],
+        "password": "Status-Student-Password-123!",
+    })
+    assert student_login.status_code == 200, student_login.text
+    student_headers = {"Authorization": f"Bearer {student_login.json()['access_token']}"}
+    assert client.get("/api/v1/auth/me", headers=student_headers).status_code == 200
 
     before_status_change = client.get("/api/v1/admin/dashboard").json()["counts"]
     deactivated = client.patch(
@@ -598,6 +605,9 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
     assert db.student_enrollments.count_documents({
         "student_id": student_id, "is_active": False
     }) == 1
+    # Deactivation must immediately invalidate an already-issued Student token.
+    blocked_token = client.get("/api/v1/auth/me", headers=student_headers)
+    assert blocked_token.status_code == 401
     inactive_student = next(
         item for item in client.get("/api/v1/admin/students").json()
         if item["_id"] == student_id
@@ -613,6 +623,10 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
     assert db.student_enrollments.count_documents({
         "student_id": student_id, "is_active": True
     }) == 1
+    # The current auth dependency rechecks is_active on every request;
+    # after reactivation the still-valid, unexpired token is accepted again.
+    restored_token = client.get("/api/v1/auth/me", headers=student_headers)
+    assert restored_token.status_code == 200, restored_token.text
     reactivated_counts = client.get("/api/v1/admin/dashboard").json()["counts"]
     assert reactivated_counts["users"] == before_status_change["users"]
     assert reactivated_counts["student_enrollments"] == before_status_change["student_enrollments"]
