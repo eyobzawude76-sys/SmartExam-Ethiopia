@@ -7,7 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_env: Literal["development", "test", "production"] = "development"
+    # Require an explicit deployment mode so a missing production variable
+    # cannot silently disable production-only security validation.
+    app_env: Literal["development", "test", "production"]
     api_v1_prefix: str = "/api/v1"
     mongodb_uri: str = "mongodb://127.0.0.1:27017"
     mongodb_database: str = "smart_exam_ethiopia"
