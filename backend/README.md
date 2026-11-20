@@ -58,3 +58,23 @@ All `/api/v1/admin/*` routes require a valid Admin JWT:
 - `PATCH /admin/users/{user_id}/status`
 
 The temporary password is returned only in the successful create-account response. The database stores only the Argon2 hash; existing passwords cannot be viewed.
+
+
+## Automated Admin verification
+
+The repository includes an Admin integration test suite and GitHub Actions workflow at `.github/workflows/admin-ci.yml`.
+
+Local test commands (MongoDB must be running):
+
+```powershell
+cd backend
+pip install -r requirements.txt
+pip install pytest httpx
+$env:APP_ENV="test"
+$env:MONGODB_URI="mongodb://127.0.0.1:27017"
+$env:MONGODB_DATABASE="smart_exam_admin_test"
+$env:JWT_SECRET_KEY="test-only-secret-key-at-least-32-characters-long"
+pytest -q
+```
+
+The tests cover unauthenticated access, Admin login, academic structure creation, Teacher and Student creation, assignment validation, password hashing, and Teacher role denial. CI also compiles Python and type-checks/builds the Next.js frontend. Use the repository's **Actions** tab to see the actual run result; a committed workflow or test file alone is not evidence that tests passed.
