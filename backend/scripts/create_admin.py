@@ -1,6 +1,8 @@
 """Create the first Admin using ADMIN_USERNAME and ADMIN_PASSWORD from backend/.env."""
 import asyncio
 import os
+import re
+from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -9,7 +11,7 @@ from pymongo import ASCENDING
 from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 async def main():
@@ -18,8 +20,18 @@ async def main():
     full_name = os.environ.get("ADMIN_FULL_NAME", "System Administrator").strip()
     uri = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017")
     database_name = os.environ.get("MONGODB_DATABASE", "smart_exam_ethiopia")
-    if len(username) < 3 or len(password) < 12 or "replace-with" in password.lower():
-        raise SystemExit("Set ADMIN_USERNAME (3+ chars) and a real ADMIN_PASSWORD (12+ chars) in backend/.env.")
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._-]{3,50}", username)
+        or len(password) < 12
+        or len(password) > 128
+        or "replace-with" in password.lower()
+        or len(full_name) < 2
+        or len(full_name) > 120
+    ):
+        raise SystemExit(
+            "Set a valid ADMIN_USERNAME (3-50 letters/numbers/._-), "
+            "ADMIN_FULL_NAME (2-120 chars), and ADMIN_PASSWORD (12-128 chars) in backend/.env."
+        )
     client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
     try:
         db = client[database_name]
