@@ -242,3 +242,59 @@ def test_teacher_can_distribute_one_exam_to_all_assignments_and_publish_together
 
     repeated = ctx["client"].post("/api/v1/teacher/exams/publish-batch", json={"exam_ids": exam_ids})
     assert repeated.status_code == 409
+
+
+def test_teacher_must_grade_every_question_before_publishing_result(teacher_context):
+    ctx = teacher_context
+    student_id = str(uuid.uuid4())
+    exam_id = str(uuid.uuid4())
+    submission_id = str(uuid.uuid4())
+    question_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+    ctx["db"].users.insert_one({
+        "_id": student_id, "username": f"student_{uuid.uuid4().hex[:8]}",
+        "full_name": "Student Test", "role": "STUDENT", "is_active": True,
+    })
+    ctx["db"].exams.insert_one({
+        "_id": exam_id, "teacher_id": ctx["teacher_id"],
+        "questions_snapshot": [
+            {"question_id": question_ids[0], "question_text": "Q1?", "options": ["A", "B"], "points": 2},
+            {"question_id": question_ids[1], "question_text": "Q2?", "options": ["A", "B"], "points": 3},
+        ],
+        "total_points": 5,
+    })
+    ctx["db"].submissions.insert_one({
+        "_id": submission_id, "exam_id": exam_id, "teacher_id": ctx["teacher_id"],
+        "student_id": student_id, "status": "submitted", "answers": [],
+        "result_published": False,
+    })
+
+    premature_publish = ctx["client"].post(
+        f"/api/v1/teacher/submissions/{submission_id}/publish-result"
+    )
+    assert premature_publish.status_code == 404
+
+    incomplete_grade = ctx["client"].patch(
+        f"/api/v1/teacher/submissions/{submission_id}/grade",
+        json={"grades": [{"question_id": question_ids[0], "is_correct": True}]},
+    )
+    assert incomplete_grade.status_code == 422
+
+    duplicate_grade = ctx["client"].patch(
+        f"/api/v1/teacher/submissions/{submission_id}/grade",
+        json={"grades": [
+            {"question_id": question_ids[0], "is_correct": True},
+            {"question_id": question_ids[0], "is_correct": False},
+        ]},
+    )
+    assert duplicate_grade.status_code == 422
+
+    valid_grade = ctx["client"].patch(
+        f"/api/v1/teacher/submissions/{submission_id}/grade",
+        json={"grades": [
+            {"question_id": question_ids[0], "is_correct": True},
+            {"question_id": question_ids[1], "is_correct": False},
+        ]},
+    )
+    assert valid_grade.status_code == 200, valid_grade.text
+    assert valid_grade.json()["score"] == 2
+    assert valid_grade.json()["total_points"] == 5
