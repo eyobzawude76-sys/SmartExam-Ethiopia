@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pymongo.errors import DuplicateKeyError
 
 from app.dependencies import get_db, get_current_user
-from app.teacher_schemas import TeacherQuestionInput, TeacherExamInput, TeacherPublishExamsInput, SubmissionGradeInput
+from app.teacher_schemas import TeacherQuestionInput, TeacherExamInput, TeacherDistributeExamInput, TeacherPublishExamsInput, SubmissionGradeInput
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 logger = logging.getLogger(__name__)
@@ -166,6 +166,43 @@ async def create_exam(payload: TeacherExamInput, db=Depends(get_db),
     }
     await db.exams.insert_one(exam)
     return {key: value for key, value in exam.items() if key != "questions_snapshot"}
+
+
+
+@router.post("/exams/distribute", status_code=201)
+async def distribute_exam(payload: TeacherDistributeExamInput, db=Depends(get_db),
+                          teacher=Depends(teacher_account)):
+    source = payload.source_assignment
+    await require_assignment(db, teacher["_id"], source.subject_id, source.class_id, source.section_id)
+    questions = await db.questions.find({
+        "_id": {"$in": payload.question_ids}, "teacher_id": teacher["_id"],
+        "subject_id": source.subject_id, "class_id": source.class_id,
+        "section_id": source.section_id, "is_active": True,
+    }).to_list(200)
+    if len(questions) != len(payload.question_ids):
+        raise HTTPException(status_code=422, detail="Every selected question must belong to the source assignment")
+    created = []
+    for target in payload.target_assignments:
+        await require_assignment(db, teacher["_id"], target.subject_id, target.class_id, target.section_id)
+        exam_id = str(uuid4())
+        snapshot = [{
+            "question_id": str(uuid4()), "question_text": q["question_text"],
+            "options": q["options"], "correct_option": q["correct_option"], "points": q["points"],
+        } for q in questions]
+        exam = {
+            "_id": exam_id, "teacher_id": teacher["_id"], "title": payload.title,
+            "subject_id": target.subject_id, "class_id": target.class_id,
+            "section_id": target.section_id, "question_ids": [q["question_id"] for q in snapshot],
+            "questions_snapshot": snapshot,
+            "total_points": sum(q["points"] for q in snapshot),
+            "duration_minutes": payload.duration_minutes, "starts_at": payload.starts_at,
+            "ends_at": payload.ends_at, "allow_retakes": payload.allow_retakes,
+            "status": "draft", "created_at": now(), "published_at": None,
+        }
+        created.append(exam)
+    if created:
+        await db.exams.insert_many(created)
+    return {"created_exam_ids": [exam["_id"] for exam in created], "created_count": len(created)}
 
 
 @router.get("/exams")
