@@ -320,6 +320,26 @@ def test_teacher_cannot_view_or_publish_exam_after_assignment_is_deactivated(tea
     })
     assert exam.status_code == 201, exam.text
     exam_id = exam.json()["_id"]
+    student_id = str(uuid.uuid4())
+    grade_submission_id = str(uuid.uuid4())
+    publish_submission_id = str(uuid.uuid4())
+    question_id = question.json()["_id"]
+    ctx["db"].users.insert_one({
+        "_id": student_id, "username": f"student_{uuid.uuid4().hex[:8]}",
+        "full_name": "Assignment Test Student", "role": "STUDENT", "is_active": True,
+    })
+    ctx["db"].submissions.insert_many([
+        {
+            "_id": grade_submission_id, "exam_id": exam_id, "teacher_id": ctx["teacher_id"],
+            "student_id": student_id, "status": "submitted", "answers": [],
+            "result_published": False,
+        },
+        {
+            "_id": publish_submission_id, "exam_id": exam_id, "teacher_id": ctx["teacher_id"],
+            "student_id": student_id, "status": "graded", "answers": [],
+            "score": 1, "total_points": 1, "result_published": False,
+        },
+    ])
 
     ctx["db"].teacher_assignments.update_one(
         {"teacher_id": ctx["teacher_id"], "subject_id": ctx["subject_id"],
@@ -340,3 +360,15 @@ def test_teacher_cannot_view_or_publish_exam_after_assignment_is_deactivated(tea
     assert publish.status_code == 403
     stored = ctx["db"].exams.find_one({"_id": exam_id})
     assert stored["status"] == "draft"
+
+    grade = ctx["client"].patch(
+        f"/api/v1/teacher/submissions/{grade_submission_id}/grade",
+        json={"grades": [{"question_id": question_id, "is_correct": True}]},
+    )
+    assert grade.status_code == 403
+
+    publish_result = ctx["client"].post(
+        f"/api/v1/teacher/submissions/{publish_submission_id}/publish-result"
+    )
+    assert publish_result.status_code == 403
+    assert ctx["db"].submissions.find_one({"_id": publish_submission_id})["result_published"] is False
