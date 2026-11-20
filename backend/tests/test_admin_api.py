@@ -513,3 +513,49 @@ def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
     db.users.delete_one({"_id": student_id})
     db.student_enrollments.delete_many({"student_id": student_id})
     mongo.close()
+
+def test_admin_mutations_require_authentication():
+    with TestClient(app) as unauthenticated:
+        responses = [
+            unauthenticated.post("/api/v1/admin/subjects", json={"name": "Mathematics", "code": "MATH"}),
+            unauthenticated.post("/api/v1/admin/classes", json={"name": "Grade 11"}),
+            unauthenticated.patch("/api/v1/admin/users/not-a-user/status", json={"is_active": False}),
+        ]
+    assert [response.status_code for response in responses] == [401, 401, 401]
+
+
+def test_admin_cannot_change_own_role_or_status(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    admin = db.users.find_one({"role": "ADMIN"})
+    assert admin is not None
+
+    response = client.patch(
+        f"/api/v1/admin/users/{admin['_id']}/status",
+        json={"is_active": False},
+    )
+    assert response.status_code == 404
+    stored_admin = db.users.find_one({"_id": admin["_id"]})
+    assert stored_admin["role"] == "ADMIN"
+    assert stored_admin["is_active"] is True
+    mongo.close()
+
+
+def test_password_change_rejects_wrong_or_unchanged_password(client):
+    wrong_current = client.post("/api/v1/auth/change-password", json={
+        "current_password": "Wrong-Current-Password-123!",
+        "new_password": "Another-New-Password-123!",
+    })
+    assert wrong_current.status_code == 400
+
+    unchanged = client.post("/api/v1/auth/change-password", json={
+        "current_password": "Admin-Test-Password-123!",
+        "new_password": "Admin-Test-Password-123!",
+    })
+    assert unchanged.status_code == 422
+
+    login = client.post("/api/v1/auth/login", json={
+        "username": client.get("/api/v1/auth/me").json()["username"],
+        "password": "Admin-Test-Password-123!",
+    })
+    assert login.status_code == 200
