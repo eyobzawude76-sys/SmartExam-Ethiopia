@@ -12,6 +12,7 @@ os.environ.setdefault("FRONTEND_ORIGIN", "http://localhost:3000")
 
 from app.main import app
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password, verify_password
 
 
@@ -39,6 +40,21 @@ def client():
         for collection_name in db.list_collection_names():
             db[collection_name].delete_many({})
         mongo.close()
+
+
+def test_database_enforces_only_one_admin_account(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    with pytest.raises(DuplicateKeyError):
+        db.users.insert_one({
+            "_id": str(uuid.uuid4()),
+            "username": f"second_admin_{uuid.uuid4().hex[:8]}",
+            "full_name": "Second Admin",
+            "password_hash": hash_password("Second-Admin-Password-123!"),
+            "role": "ADMIN",
+            "is_active": True,
+        })
+    mongo.close()
 
 
 def test_admin_dashboard_requires_authentication():
