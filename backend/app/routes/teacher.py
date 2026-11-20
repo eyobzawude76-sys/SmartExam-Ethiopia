@@ -188,6 +188,19 @@ async def publish_exam(exam_id: str, db=Depends(get_db), teacher=Depends(teacher
 
 @router.get("/exams/{exam_id}/submissions")
 async def list_exam_submissions(exam_id: str, db=Depends(get_db), teacher=Depends(teacher_account)):
+    current = now()
+    expired = await db.submissions.find({
+        "exam_id": exam_id, "teacher_id": teacher["_id"], "status": "in_progress",
+        "deadline_at": {"$lte": current},
+    }, {"_id": 1, "deadline_at": 1}).to_list(5000)
+    for attempt in expired:
+        deadline = attempt["deadline_at"]
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=current.tzinfo)
+        await db.submissions.update_one(
+            {"_id": attempt["_id"], "status": "in_progress"},
+            {"$set": {"status": "submitted", "submitted_at": deadline, "auto_submitted": True}},
+        )
     exam = await db.exams.find_one({"_id": exam_id, "teacher_id": teacher["_id"]})
     if exam is None:
         raise HTTPException(status_code=404, detail="Exam not found")
