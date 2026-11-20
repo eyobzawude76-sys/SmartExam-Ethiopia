@@ -142,6 +142,41 @@ def test_student_sees_all_subjects_but_only_same_class_and_section(student_conte
     assert len(visible_ids) == 2
 
 
+
+def test_student_can_take_exam_copied_to_their_assignment(student_context):
+    ctx = student_context
+    copied_exam_id = str(uuid.uuid4())
+    copied_question_id = str(uuid.uuid4())
+    ctx["db"].exams.insert_one({
+        "_id": copied_exam_id, "teacher_id": ctx["teacher_id"],
+        "title": "Distributed Mathematics Test",
+        "subject_id": str(uuid.uuid4()), "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"], "status": "published",
+        "duration_minutes": 25, "starts_at": None, "ends_at": None,
+        "allow_retakes": False, "total_points": 3,
+        "questions_snapshot": [{
+            "question_id": copied_question_id,
+            "question_text": "What is 3 + 4?",
+            "options": ["5", "6", "7", "8"],
+            "correct_option": 2, "points": 3,
+        }],
+    })
+
+    listed = ctx["client"].get("/api/v1/student/exams")
+    assert listed.status_code == 200
+    copied = next(item for item in listed.json() if item["id"] == copied_exam_id)
+    assert copied["question_count"] == 1
+
+    started = ctx["client"].post(f"/api/v1/student/exams/{copied_exam_id}/start")
+    assert started.status_code == 200, started.text
+    assert started.json()["questions"] == [{
+        "question_id": copied_question_id,
+        "question_text": "What is 3 + 4?",
+        "options": ["5", "6", "7", "8"],
+        "points": 3,
+    }]
+    assert "correct_option" not in str(started.json())
+
 def test_student_cannot_start_exam_from_another_section_or_class(student_context):
     ctx = student_context
     wrong_section_exam = str(uuid.uuid4())
