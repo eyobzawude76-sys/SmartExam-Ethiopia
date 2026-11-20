@@ -110,6 +110,11 @@ async def create_teacher(payload: TeacherCreateInput, db=Depends(get_db), admin=
         await db.teacher_assignments.delete_many({"teacher_id": user_id})
         await db.users.delete_one({"_id": user_id})
         raise HTTPException(status_code=409, detail="Username or teacher assignment already exists")
+    except Exception:
+        # Best-effort compensation for non-duplicate database failures.
+        await db.teacher_assignments.delete_many({"teacher_id": user_id})
+        await db.users.delete_one({"_id": user_id})
+        raise
     return {"teacher": public_user(user), "assignments": [{"subject_id": x["subject_id"], "class_id": x["class_id"], "section_id": x["section_id"]} for x in assignment_docs], "temporary_password_once": payload.temporary_password, "message": "Account created. This temporary password is shown only in this response and is never stored in plaintext."}
 
 
@@ -128,6 +133,11 @@ async def create_student(payload: StudentCreateInput, db=Depends(get_db), admin=
     except DuplicateKeyError:
         await db.users.delete_one({"_id": user_id})
         raise HTTPException(status_code=409, detail="Username or student enrollment already exists")
+    except Exception:
+        # Remove the partially created account if enrollment persistence fails.
+        await db.student_enrollments.delete_many({"student_id": user_id})
+        await db.users.delete_one({"_id": user_id})
+        raise
     return {"student": public_user(user), "enrollment": {"class_id": payload.class_id, "section_id": payload.section_id}, "temporary_password_once": payload.temporary_password, "message": "Account created. This temporary password is shown only in this response and is never stored in plaintext."}
 
 
