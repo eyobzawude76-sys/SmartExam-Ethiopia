@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password
 from app.dependencies import get_db, require_admin
-from app.schemas import SubjectInput, ClassInput, SectionInput, TeacherCreateInput, StudentCreateInput, UserStatusInput
+from app.schemas import SubjectInput, ClassInput, SectionInput, TeacherCreateInput, TeacherAssignmentInput, StudentCreateInput, UserStatusInput
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -149,3 +149,21 @@ async def set_user_status(user_id: str, payload: UserStatusInput, db=Depends(get
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Teacher or student not found")
     return {"id": user_id, "is_active": payload.is_active}
+
+
+@router.post("/teachers/{teacher_id}/assignments", status_code=201)
+async def add_teacher_assignment(teacher_id: str, payload: TeacherAssignmentInput, db=Depends(get_db), _=Depends(require_admin)):
+    teacher = await db.users.find_one({"_id": teacher_id, "role": "TEACHER", "is_active": True})
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Active teacher not found")
+    await require_active(db, "subjects", payload.subject_id, "subject")
+    await require_active(db, "classes", payload.class_id, "class")
+    section = await require_active(db, "sections", payload.section_id, "section")
+    if section["class_id"] != payload.class_id:
+        raise HTTPException(status_code=422, detail="Section does not belong to the selected class")
+    doc = {"_id": str(uuid4()), "teacher_id": teacher_id, "subject_id": payload.subject_id, "class_id": payload.class_id, "section_id": payload.section_id, "is_active": True, "created_at": now()}
+    try:
+        await db.teacher_assignments.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="This teacher assignment already exists")
+    return {"id": doc["_id"], "teacher_id": teacher_id, "subject_id": doc["subject_id"], "class_id": doc["class_id"], "section_id": doc["section_id"]}
