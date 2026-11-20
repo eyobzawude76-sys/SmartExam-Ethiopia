@@ -104,6 +104,10 @@ async def create_teacher(payload: TeacherCreateInput, db=Depends(get_db), admin=
             assignment["teacher_id"] = user_id
         await db.teacher_assignments.insert_many(assignment_docs)
     except DuplicateKeyError:
+        # insert_many may have inserted earlier assignments before a later
+        # duplicate-key error. Remove every assignment for this new teacher
+        # as well as the user so the failed request leaves no orphan records.
+        await db.teacher_assignments.delete_many({"teacher_id": user_id})
         await db.users.delete_one({"_id": user_id})
         raise HTTPException(status_code=409, detail="Username or teacher assignment already exists")
     return {"teacher": public_user(user), "assignments": [{"subject_id": x["subject_id"], "class_id": x["class_id"], "section_id": x["section_id"]} for x in assignment_docs], "temporary_password_once": payload.temporary_password, "message": "Account created. This temporary password is shown only in this response and is never stored in plaintext."}
