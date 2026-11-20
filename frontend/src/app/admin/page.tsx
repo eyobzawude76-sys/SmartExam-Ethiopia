@@ -150,7 +150,9 @@ export default function AdminPage() {
     setBusy(true);
     setMessage("");
     try {
-      await request("/auth/change-password", "POST", { current_password: currentPassword, new_password: newPassword });
+      const changed = await request("/auth/change-password", "POST", { current_password: currentPassword, new_password: newPassword });
+      window.sessionStorage.setItem("smartExamAdminToken", changed.access_token);
+      setToken(changed.access_token);
       window.sessionStorage.setItem("smartExamAdminMustChangePassword", "false");
       setMustChangePassword(false);
       setCurrentPassword("");
