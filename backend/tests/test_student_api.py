@@ -212,6 +212,16 @@ def test_student_can_start_save_and_submit_exam_once(student_context):
     submitted = ctx["client"].post(f"/api/v1/student/submissions/{submission_id}/submit")
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "submitted"
+
+    # A retry after a timeout or duplicate click must not fail or alter the submission.
+    repeated_submit = ctx["client"].post(f"/api/v1/student/submissions/{submission_id}/submit")
+    assert repeated_submit.status_code == 200, repeated_submit.text
+    assert repeated_submit.json()["status"] == "submitted"
+
+    saved_record = ctx["db"].submissions.find_one({"_id": submission_id})
+    assert saved_record["status"] == "submitted"
+    assert saved_record["answers"][0]["selected_option"] == 2
+
     again = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
     assert again.status_code == 409
 
