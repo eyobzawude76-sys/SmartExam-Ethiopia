@@ -55,9 +55,18 @@ async def teacher_dashboard(db=Depends(get_db), teacher=Depends(teacher_account)
     assignments = await db.teacher_assignments.find(
         {"teacher_id": teacher["_id"], "is_active": True}, {"_id": 0}
     ).to_list(100)
-    exam_count = await db.exams.count_documents({"teacher_id": teacher["_id"]})
-    question_count = await db.questions.count_documents({"teacher_id": teacher["_id"], "is_active": True})
-    pending_count = await db.submissions.count_documents({"teacher_id": teacher["_id"], "status": "submitted"})
+    scopes = [{
+        "subject_id": item["subject_id"], "class_id": item["class_id"],
+        "section_id": item["section_id"],
+    } for item in assignments]
+    scope_query = {"teacher_id": teacher["_id"], "$or": scopes} if scopes else None
+    exam_count = await db.exams.count_documents(scope_query) if scope_query else 0
+    question_count = await db.questions.count_documents({
+        **scope_query, "is_active": True,
+    }) if scope_query else 0
+    pending_count = await db.submissions.count_documents({
+        **scope_query, "status": "submitted",
+    }) if scope_query else 0
     return {
         "teacher": {"id": teacher["_id"], "username": teacher["username"], "full_name": teacher["full_name"]},
         "assignments": assignments,
@@ -89,7 +98,17 @@ async def list_my_assignments(db=Depends(get_db), teacher=Depends(teacher_accoun
 async def list_questions(subject_id: str | None = None, class_id: str | None = None,
                          section_id: str | None = None, db=Depends(get_db),
                          teacher=Depends(teacher_account)):
-    query = {"teacher_id": teacher["_id"], "is_active": True}
+    assignments = await db.teacher_assignments.find(
+        {"teacher_id": teacher["_id"], "is_active": True},
+        {"subject_id": 1, "class_id": 1, "section_id": 1, "_id": 0},
+    ).to_list(100)
+    scopes = [{
+        "subject_id": item["subject_id"], "class_id": item["class_id"],
+        "section_id": item["section_id"],
+    } for item in assignments]
+    if not scopes:
+        return []
+    query = {"teacher_id": teacher["_id"], "is_active": True, "$or": scopes}
     for key, value in (("subject_id", subject_id), ("class_id", class_id), ("section_id", section_id)):
         if value:
             query[key] = value
