@@ -150,11 +150,18 @@ def test_admin_can_deactivate_teacher_and_block_existing_token(client):
 
 
 def test_duplicate_username_is_rejected(client):
+    subject = client.post("/api/v1/admin/subjects", json={"name": "Chemistry", "code": f"CHEM{uuid.uuid4().hex[:4].upper()}"})
+    assert subject.status_code == 201, subject.text
+    class_response = client.post("/api/v1/admin/classes", json={"name": f"Grade 12 {uuid.uuid4().hex[:4]}"})
+    assert class_response.status_code == 201, class_response.text
+    class_id = class_response.json()["id"]
+    section = client.post("/api/v1/admin/sections", json={"class_id": class_id, "name": "B"})
+    assert section.status_code == 201, section.text
     username = f"duplicate_{uuid.uuid4().hex[:8]}"
     body = {
         "full_name": "Teacher One", "username": username,
         "temporary_password": "Teacher-Temp-Password-123!",
-        "assignments": [],
+        "assignments": [{"subject_id": subject.json()["id"], "class_id": class_id, "section_id": section.json()["id"]}],
     }
     first = client.post("/api/v1/admin/teachers", json=body)
     assert first.status_code == 201, first.text
