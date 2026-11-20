@@ -187,3 +187,58 @@ def test_teacher_can_grade_and_publish_one_student_result(teacher_context):
         "grades": [{"question_id": question_id, "is_correct": False}],
     })
     assert cannot_change.status_code == 409
+
+
+def test_teacher_can_distribute_one_exam_to_all_assignments_and_publish_together(teacher_context):
+    ctx = teacher_context
+    second_subject = str(uuid.uuid4())
+    second_section = str(uuid.uuid4())
+    ctx["db"].subjects.insert_one({
+        "_id": second_subject, "name": "Physics", "code": f"PHY{uuid.uuid4().hex[:4]}",
+        "is_active": True,
+    })
+    ctx["db"].sections.insert_one({
+        "_id": second_section, "class_id": ctx["class_id"], "name": "11-B", "is_active": True,
+    })
+    ctx["db"].teacher_assignments.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "subject_id": second_subject, "class_id": ctx["class_id"],
+        "section_id": second_section, "is_active": True,
+    })
+    question = ctx["client"].post("/api/v1/teacher/questions", json={
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"], "question_text": "What is 5 + 5?",
+        "options": ["8", "9", "10", "11"], "correct_option": 2, "points": 2,
+    })
+    assert question.status_code == 201, question.text
+
+    distributed = ctx["client"].post("/api/v1/teacher/exams/distribute", json={
+        "title": "Common Mathematics Test",
+        "source_assignment": {
+            "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+            "section_id": ctx["section_id"],
+        },
+        "target_assignments": [
+            {"subject_id": ctx["subject_id"], "class_id": ctx["class_id"], "section_id": ctx["section_id"]},
+            {"subject_id": second_subject, "class_id": ctx["class_id"], "section_id": second_section},
+        ],
+        "question_ids": [question.json()["_id"]],
+        "duration_minutes": 30,
+    })
+    assert distributed.status_code == 201, distributed.text
+    exam_ids = distributed.json()["created_exam_ids"]
+    assert len(exam_ids) == 2
+    exams = list(ctx["db"].exams.find({"_id": {"$in": exam_ids}}))
+    assert {(e["subject_id"], e["section_id"]) for e in exams} == {
+        (ctx["subject_id"], ctx["section_id"]), (second_subject, second_section)
+    }
+    assert exams[0]["questions_snapshot"][0]["question_text"] == "What is 5 + 5?"
+    assert exams[0]["questions_snapshot"][0]["question_id"] != exams[1]["questions_snapshot"][0]["question_id"]
+
+    published = ctx["client"].post("/api/v1/teacher/exams/publish-batch", json={"exam_ids": exam_ids})
+    assert published.status_code == 200, published.text
+    assert published.json()["published_count"] == 2
+    assert ctx["db"].exams.count_documents({"_id": {"$in": exam_ids}, "status": "published"}) == 2
+
+    repeated = ctx["client"].post("/api/v1/teacher/exams/publish-batch", json={"exam_ids": exam_ids})
+    assert repeated.status_code == 409
