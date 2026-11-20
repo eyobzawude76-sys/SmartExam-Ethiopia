@@ -89,6 +89,79 @@ def test_student_sees_only_published_exams_for_own_enrollment(student_context):
     assert [item["id"] for item in response.json()] == [ctx["exam_id"]]
 
 
+
+
+def test_student_sees_all_subjects_but_only_same_class_and_section(student_context):
+    ctx = student_context
+    other_subject = str(uuid.uuid4())
+    ctx["db"].teacher_assignments.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "subject_id": other_subject, "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"], "is_active": True,
+    })
+    same_group_other_subject = str(uuid.uuid4())
+    ctx["db"].exams.insert_one({
+        "_id": same_group_other_subject, "teacher_id": ctx["teacher_id"],
+        "title": "English exam", "subject_id": other_subject,
+        "class_id": ctx["class_id"], "section_id": ctx["section_id"],
+        "status": "published", "duration_minutes": 20, "questions_snapshot": [],
+    })
+
+    other_section = str(uuid.uuid4())
+    ctx["db"].teacher_assignments.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": other_section, "is_active": True,
+    })
+    ctx["db"].exams.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "title": "Grade 11 Section B", "subject_id": ctx["subject_id"],
+        "class_id": ctx["class_id"], "section_id": other_section,
+        "status": "published", "duration_minutes": 20, "questions_snapshot": [],
+    })
+
+    other_class = str(uuid.uuid4())
+    ctx["db"].teacher_assignments.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "subject_id": ctx["subject_id"], "class_id": other_class,
+        "section_id": ctx["section_id"], "is_active": True,
+    })
+    ctx["db"].exams.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "title": "Grade 12 Section A", "subject_id": ctx["subject_id"],
+        "class_id": other_class, "section_id": ctx["section_id"],
+        "status": "published", "duration_minutes": 20, "questions_snapshot": [],
+    })
+
+    response = ctx["client"].get("/api/v1/student/exams")
+    assert response.status_code == 200
+    visible = response.json()
+    visible_ids = {exam["id"] for exam in visible}
+    assert ctx["exam_id"] in visible_ids
+    assert same_group_other_subject in visible_ids
+    assert len(visible_ids) == 2
+
+
+def test_student_cannot_start_exam_from_another_section_or_class(student_context):
+    ctx = student_context
+    wrong_section_exam = str(uuid.uuid4())
+    ctx["db"].exams.insert_one({
+        "_id": wrong_section_exam, "teacher_id": ctx["teacher_id"],
+        "title": "Wrong section", "subject_id": ctx["subject_id"],
+        "class_id": ctx["class_id"], "section_id": str(uuid.uuid4()),
+        "status": "published", "duration_minutes": 20, "questions_snapshot": [],
+    })
+    wrong_class_exam = str(uuid.uuid4())
+    ctx["db"].exams.insert_one({
+        "_id": wrong_class_exam, "teacher_id": ctx["teacher_id"],
+        "title": "Wrong class", "subject_id": ctx["subject_id"],
+        "class_id": str(uuid.uuid4()), "section_id": ctx["section_id"],
+        "status": "published", "duration_minutes": 20, "questions_snapshot": [],
+    })
+    assert ctx["client"].post(f"/api/v1/student/exams/{wrong_section_exam}/start").status_code == 404
+    assert ctx["client"].post(f"/api/v1/student/exams/{wrong_class_exam}/start").status_code == 404
+
+
 def test_student_can_start_save_and_submit_exam_once(student_context):
     ctx = student_context
     started = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
