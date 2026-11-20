@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Role = Literal["ADMIN", "TEACHER", "STUDENT"]
 
@@ -13,7 +13,11 @@ class UserCreateInput(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")
     full_name: str = Field(min_length=2, max_length=120)
     temporary_password: str = Field(min_length=12, max_length=128)
-    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def normalize_full_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class TeacherAssignmentInput(BaseModel):
