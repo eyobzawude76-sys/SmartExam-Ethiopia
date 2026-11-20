@@ -161,7 +161,13 @@ def test_admin_can_deactivate_teacher_and_block_existing_token(client):
     assert db.teacher_assignments.count_documents({"teacher_id": teacher_id, "is_active": True}) == 0
     blocked = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert blocked.status_code == 401
+    assert db.teacher_assignments.count_documents({"teacher_id": teacher_id, "is_active": False}) == 1
+
+    reactivated = client.patch(f"/api/v1/admin/users/{teacher_id}/status", json={"is_active": True})
+    assert reactivated.status_code == 200, reactivated.text
+    assert db.teacher_assignments.count_documents({"teacher_id": teacher_id, "is_active": True}) == 1
     db.users.delete_many({"_id": teacher_id})
+    db.teacher_assignments.delete_many({"teacher_id": teacher_id})
     mongo.close()
 
 
@@ -338,4 +344,51 @@ def test_admin_cannot_add_assignment_to_inactive_teacher(client):
     assert response.status_code == 404
     assert db.teacher_assignments.count_documents({"teacher_id": teacher_id}) == 0
     db.users.delete_one({"_id": teacher_id})
+    mongo.close()
+
+
+
+def test_admin_can_deactivate_and_reactivate_student_enrollment(client):
+    mongo = MongoClient(os.environ["MONGODB_URI"])
+    db = mongo[os.environ["MONGODB_DATABASE"]]
+    student_id = str(uuid.uuid4())
+    db.users.insert_one({
+        "_id": student_id,
+        "username": f"status_student_{uuid.uuid4().hex[:8]}",
+        "full_name": "Status Student",
+        "password_hash": hash_password("Status-Student-Password-123!"),
+        "role": "STUDENT",
+        "is_active": True,
+    })
+    db.student_enrollments.insert_one({
+        "_id": str(uuid.uuid4()),
+        "student_id": student_id,
+        "class_id": "grade-11",
+        "section_id": "section-11-a",
+        "is_active": True,
+    })
+
+    deactivated = client.patch(
+        f"/api/v1/admin/users/{student_id}/status",
+        json={"is_active": False},
+    )
+    assert deactivated.status_code == 200, deactivated.text
+    assert db.student_enrollments.count_documents({
+        "student_id": student_id, "is_active": True
+    }) == 0
+    assert db.student_enrollments.count_documents({
+        "student_id": student_id, "is_active": False
+    }) == 1
+
+    reactivated = client.patch(
+        f"/api/v1/admin/users/{student_id}/status",
+        json={"is_active": True},
+    )
+    assert reactivated.status_code == 200, reactivated.text
+    assert db.student_enrollments.count_documents({
+        "student_id": student_id, "is_active": True
+    }) == 1
+
+    db.users.delete_one({"_id": student_id})
+    db.student_enrollments.delete_many({"student_id": student_id})
     mongo.close()
