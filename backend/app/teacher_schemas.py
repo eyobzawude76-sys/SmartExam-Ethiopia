@@ -43,6 +43,16 @@ class TeacherExamInput(BaseModel):
         return self
 
 
+class TeacherPublishExamsInput(BaseModel):
+    exam_ids: list[str] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_unique_exam_ids(self):
+        if len(set(self.exam_ids)) != len(self.exam_ids):
+            raise ValueError("Duplicate exam IDs are not allowed")
+        return self
+
+
 class QuestionGradeInput(BaseModel):
     question_id: str = Field(min_length=1)
     is_correct: bool
