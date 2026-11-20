@@ -1,5 +1,7 @@
+import asyncio
 import os
 import uuid
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
@@ -14,6 +16,8 @@ from app.main import app
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from app.core.security import hash_password, verify_password
+from app.routes.admin import set_user_status
+from app.schemas import UserStatusInput
 
 
 @pytest.fixture
@@ -202,6 +206,46 @@ def test_admin_can_deactivate_teacher_and_block_existing_token(client):
     db.users.delete_many({"_id": teacher_id})
     db.teacher_assignments.delete_many({"teacher_id": teacher_id})
     mongo.close()
+
+
+def test_status_update_restores_user_when_related_update_fails():
+    class FakeUsers:
+        def __init__(self):
+            self.status = True
+
+        async def find_one(self, *_args, **_kwargs):
+            return {"_id": "teacher-1", "role": "TEACHER", "is_active": self.status}
+
+        async def update_one(self, _query, update):
+            self.status = update["$set"]["is_active"]
+
+    class FailingAssignments:
+        def __init__(self):
+            self.status = True
+            self.calls = 0
+
+        async def update_many(self, _query, update):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("simulated MongoDB write failure")
+            self.status = update["$set"]["is_active"]
+
+    class FakeDatabase:
+        def __init__(self):
+            self.users = FakeUsers()
+            self.teacher_assignments = FailingAssignments()
+
+        def __getitem__(self, name):
+            return getattr(self, name)
+
+    db = FakeDatabase()
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(set_user_status("teacher-1", UserStatusInput(is_active=False), db=db, admin={}))
+
+    assert error.value.status_code == 503
+    assert db.users.status is True
+    assert db.teacher_assignments.status is True
+    assert db.teacher_assignments.calls == 2
 
 
 def test_duplicate_username_is_rejected(client):
