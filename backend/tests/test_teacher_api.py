@@ -260,6 +260,36 @@ def test_teacher_can_distribute_one_exam_to_all_assignments_and_publish_together
     assert repeated.status_code == 409
 
 
+
+def test_teacher_csv_upload_rejects_malformed_rows_without_server_error(teacher_context):
+    ctx = teacher_context
+    url = "/api/v1/teacher/questions/upload-csv"
+    params = {
+        "subject_id": ctx["subject_id"],
+        "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"],
+    }
+
+    short_row = (
+        "question_text,option_a,option_b,option_c,option_d,correct_option,points\\n"
+        "Question with missing option, A, B, C, ,C,1\\n"
+    )
+    response = ctx["client"].post(
+        url, params=params, files={"file": ("short.csv", short_row, "text/csv")}
+    )
+    assert response.status_code == 422, response.text
+
+    duplicate_headers = (
+        "question_text,option_a,option_b,option_c,option_c,correct_option,points\\n"
+        "Duplicate header question,A,B,C,D,C,1\\n"
+    )
+    response = ctx["client"].post(
+        url, params=params, files={"file": ("duplicate.csv", duplicate_headers, "text/csv")}
+    )
+    assert response.status_code == 422, response.text
+    assert ctx["db"].questions.count_documents({"teacher_id": ctx["teacher_id"]}) == 0
+
+
 def test_teacher_must_grade_every_question_before_publishing_result(teacher_context):
     ctx = teacher_context
     student_id = str(uuid.uuid4())
