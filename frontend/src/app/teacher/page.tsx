@@ -123,7 +123,9 @@ export default function TeacherPage() {
     if (newPassword !== confirmPassword) { setMessage("Password haaraan wal hin siman."); return; }
     setBusy(true);
     try {
-      await request("/auth/change-password", "POST", { current_password: currentPassword, new_password: newPassword });
+      const changed = await request("/auth/change-password", "POST", { current_password: currentPassword, new_password: newPassword });
+      window.sessionStorage.setItem("smartExamTeacherToken", changed.access_token);
+      setToken(changed.access_token);
       window.sessionStorage.setItem("smartExamTeacherMustChangePassword", "false");
       setMustChange(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
       setMessage("Password jijjiirameera.");
