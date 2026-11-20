@@ -54,6 +54,7 @@ export default function StudentPage() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (token && !mustChange) refresh().catch(error => {
       setMessage(error instanceof Error ? error.message : "Session expired");
@@ -76,7 +77,6 @@ export default function StudentPage() {
   useEffect(() => {
     if (activeExam && secondsLeft === 0) {
       // Timer expiry submits the currently saved answers through the API.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       submitExam(true).catch(error => setMessage(error instanceof Error ? error.message : "Auto-submit failed"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,7 +187,7 @@ export default function StudentPage() {
       <header className="admin-header"><div><p className="eyebrow">SMARTEXAM ETHIOPIA / V1</p><h1>Student Dashboard</h1><p className="muted">Baga nagaan dhuftan, {studentName}.</p></div><button className="secondary" onClick={logout}>Logout</button></header>
       {message && <p className="feedback">{message}</p>}
       {activeExam ? <section className="admin-panel">
-        <div className="admin-header"><div><h2>{activeExam.title}</h2><p className="muted">Deebii kee filadhu; yeroo dhumu ofumaan submit ta'a.</p></div><strong className="exam-timer">{timeText}</strong></div>
+        <div className="admin-header"><div><h2>{activeExam.title}</h2><p className="muted">Deebii kee filadhu; yeroo dhumu ofumaan submit ta&apos;a.</p></div><strong className="exam-timer">{timeText}</strong></div>
         {activeExam.questions.map((question,index)=><article className="submission-card" key={question.question_id}>
           <h3>{index+1}. {question.question_text}</h3><p className="muted">{question.points} points</p>
           {question.options.map((option,optionIndex)=><label className="inline-check" key={optionIndex}>
@@ -205,7 +205,7 @@ export default function StudentPage() {
           </li>)}</ul>
         </section>
         <section className="admin-panel"><h2>Published Results</h2>
-          {!results.length && <p className="muted">Bu'aan ammaaf hin maxxanfamne.</p>}
+          {!results.length && <p className="muted">Bu&apos;aan ammaaf hin maxxanfamne.</p>}
           <ul>{results.map((result,index)=><li key={result.exam_id+index}>
             <strong>{result.exam_title}</strong> — {result.score} / {result.total_points}
           </li>)}</ul>
