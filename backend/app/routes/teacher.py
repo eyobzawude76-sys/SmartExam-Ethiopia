@@ -288,7 +288,17 @@ async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_d
         "_id": {"$in": payload.exam_ids}, "teacher_id": teacher["_id"], "status": "draft",
     }, {"$set": {"status": "published", "published_at": now_value}})
     if result.modified_count != len(payload.exam_ids):
-        raise HTTPException(status_code=409, detail="Not all selected exams could be published")
+        # Compensate for a concurrent state change that caused a partial batch update.
+        rollback = await db.exams.update_many({
+            "_id": {"$in": payload.exam_ids}, "teacher_id": teacher["_id"],
+            "status": "published", "published_at": now_value,
+        }, {"$set": {"status": "draft", "published_at": None}})
+        if rollback.modified_count != result.modified_count:
+            raise HTTPException(
+                status_code=500,
+                detail="Batch publish was partial and recovery was incomplete",
+            )
+        raise HTTPException(status_code=409, detail="Not all selected exams could be published; no exams were left published")
     return {"published_count": result.modified_count, "status": "published"}
 
 
