@@ -12,7 +12,10 @@ async def get_db():
     return database.db
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db=Depends(get_db)):
+async def _get_authenticated_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db=Depends(get_db),
+):
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     try:
@@ -22,6 +25,19 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials | None = De
     user = await db.users.find_one({"_id": payload.get("sub"), "is_active": True}, {"password_hash": 0})
     if user is None or user.get("role") != payload.get("role"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is unavailable")
+    return user
+
+
+async def get_current_user(user=Depends(_get_authenticated_user)):
+    if user.get("must_change_password", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required before accessing this resource",
+        )
+    return user
+
+
+async def get_user_for_password_change(user=Depends(_get_authenticated_user)):
     return user
 
 
