@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.core.database import connect_to_mongo, close_mongo_connection
 from app.routes.auth import router as auth_router
 from app.routes.admin import router as admin_router
+from app.routes.teacher import router as teacher_router
 
 settings = get_settings()
 
@@ -33,6 +34,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix=settings.api_v1_prefix)
 app.include_router(admin_router, prefix=settings.api_v1_prefix)
+app.include_router(teacher_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health", tags=["health"])
