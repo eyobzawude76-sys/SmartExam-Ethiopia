@@ -82,6 +82,15 @@ async def finalize_expired_attempts(db, student_id: str):
         )
 
 
+def student_questions(exam):
+    return [{
+        "question_id": question["question_id"],
+        "question_text": question["question_text"],
+        "options": question["options"],
+        "points": question["points"],
+    } for question in exam.get("questions_snapshot", [])]
+
+
 def safe_exam(exam):
     return {
         "id": exam["_id"], "title": exam["title"], "subject_id": exam["subject_id"],
@@ -137,7 +146,7 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
             raise HTTPException(status_code=409, detail="Exam time ended. Your saved answers were auto-submitted.")
         return {
             "submission_id": existing["_id"], "deadline_at": as_utc(existing["deadline_at"]),
-            "questions": exam["questions_snapshot"], "answers": existing.get("answers", []),
+            "questions": student_questions(exam), "answers": existing.get("answers", []),
         }
     attempts = await db.submissions.count_documents({
         "exam_id": exam_id, "student_id": student["_id"],
@@ -159,7 +168,7 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
     await db.submissions.insert_one(submission)
     return {
         "submission_id": submission_id, "deadline_at": deadline,
-        "questions": exam["questions_snapshot"], "answers": [],
+        "questions": student_questions(exam), "answers": [],
     }
 
 
