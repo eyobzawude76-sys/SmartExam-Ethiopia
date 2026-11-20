@@ -12,6 +12,10 @@ export default function AdminPage() {
   const [token, setToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [subjects, setSubjects] = useState<Item[]>([]);
@@ -65,14 +69,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     const saved = window.sessionStorage.getItem("smartExamAdminToken");
-    if (saved) setToken(saved);
+    const passwordChangeRequired = window.sessionStorage.getItem("smartExamAdminMustChangePassword") === "true";
+    if (saved) {
+      setMustChangePassword(passwordChangeRequired);
+      setToken(saved);
+    }
   }, []);
 
   useEffect(() => {
-    if (token) refresh().catch((error) => { setMessage(error.message); setToken(""); window.sessionStorage.removeItem("smartExamAdminToken"); });
-    // Refresh only when authentication changes.
+    if (token && !mustChangePassword) refresh().catch((error) => { setMessage(error.message); setToken(""); window.sessionStorage.removeItem("smartExamAdminToken"); window.sessionStorage.removeItem("smartExamAdminMustChangePassword"); });
+    // Refresh only when authentication changes or the required password change is completed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, mustChangePassword]);
 
   async function login(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
@@ -80,7 +88,10 @@ export default function AdminPage() {
       const data = await request("/auth/login", "POST", { username, password });
       if (data.user.role !== "ADMIN") throw new Error("This account is not an Admin account.");
       window.sessionStorage.setItem("smartExamAdminToken", data.access_token);
-      setToken(data.access_token); setPassword(""); setMessage("Admin seente.");
+      window.sessionStorage.setItem("smartExamAdminMustChangePassword", String(Boolean(data.user.must_change_password)));
+      setMustChangePassword(Boolean(data.user.must_change_password));
+      setToken(data.access_token); setPassword("");
+      setMessage(data.user.must_change_password ? "Jalqaba password jijjiiri." : "Admin seente.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Login failed"); }
     finally { setBusy(false); }
   }
@@ -126,8 +137,33 @@ export default function AdminPage() {
     }
   }
 
+  async function changePassword(event: FormEvent) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setMessage("New password fi confirmation wal hin siman.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await request("/auth/change-password", "POST", { current_password: currentPassword, new_password: newPassword });
+      window.sessionStorage.setItem("smartExamAdminMustChangePassword", "false");
+      setMustChangePassword(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Password jijjiirameera. Admin dashboard banamaa jira.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Password change failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function logout() {
-    window.sessionStorage.removeItem("smartExamAdminToken"); setToken(""); setCounts({}); setMessage("Baate.");
+    window.sessionStorage.removeItem("smartExamAdminToken");
+    window.sessionStorage.removeItem("smartExamAdminMustChangePassword");
+    setMustChangePassword(false); setToken(""); setCounts({}); setMessage("Baate.");
   }
 
   if (!token) return (
@@ -139,6 +175,21 @@ export default function AdminPage() {
         <label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></label>
         <button disabled={busy}>{busy ? "Seenaa jira..." : "Login"}</button>
       </form>{message && <p className="feedback">{message}</p>}
+    </section></main>
+  );
+
+  if (mustChangePassword) return (
+    <main className="admin-shell"><section className="admin-panel login-panel">
+      <p className="eyebrow">SMARTEXAM ETHIOPIA</p><h1>Password Change Required</h1>
+      <p className="muted">Admin hojii itti fufuuf password yeroo jalqabaa kenname jijjiiruu qaba.</p>
+      <form onSubmit={changePassword} className="stack">
+        <label>Current temporary password<input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" minLength={8} required /></label>
+        <label>New password (12+ characters)<input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" minLength={12} required /></label>
+        <label>Confirm new password<input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={12} required /></label>
+        <button disabled={busy}>{busy ? "Jijjiiraa jira..." : "Change password"}</button>
+      </form>
+      <button type="button" className="secondary" onClick={logout}>Logout</button>
+      {message && <p className="feedback">{message}</p>}
     </section></main>
   );
 
