@@ -24,6 +24,7 @@ export default function TeacherPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState("");
+  const [selectedExamAssignment, setSelectedExamAssignment] = useState("");
   const [questionText, setQuestionText] = useState("");
   const [options, setOptions] = useState(["", "", "", ""]);
   const [correctOption, setCorrectOption] = useState("0");
@@ -57,9 +58,11 @@ export default function TeacherPage() {
     setAssignments(a);
     setQuestions(q);
     setExams(e);
-    if (!selectedAssignment && dashboard.assignments.length) {
-      const a = dashboard.assignments[0];
-      setSelectedAssignment([a.subject_id, a.class_id, a.section_id].join("|"));
+    if (dashboard.assignments.length) {
+      const first = dashboard.assignments[0];
+      const firstKey = [first.subject_id, first.class_id, first.section_id].join("|");
+      setSelectedAssignment(current => current || firstKey);
+      setSelectedExamAssignment(current => current || firstKey);
     }
   }
 
@@ -125,39 +128,52 @@ export default function TeacherPage() {
     finally { setBusy(false); }
   }
 
-  const assignmentParts = selectedAssignment.split("|");
-  const currentAssignment = assignments.find(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedAssignment);
+  const assignmentParts = selectedExamAssignment.split("|");
+  const currentAssignment = assignments.find(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedExamAssignment);
+  const questionTargets = selectedAssignment === "__ALL__"
+    ? assignments
+    : assignments.filter(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedAssignment);
 
   async function createQuestion(event: FormEvent) {
-    event.preventDefault(); if (!currentAssignment) return;
+    event.preventDefault(); if (!questionTargets.length) return;
     setBusy(true); setMessage("");
     try {
-      await request("/teacher/questions", "POST", {
-        subject_id: currentAssignment.subject_id, class_id: currentAssignment.class_id,
-        section_id: currentAssignment.section_id, question_text: questionText,
-        options, correct_option: Number(correctOption), points: Number(points),
-      });
+      let created = 0;
+      for (const target of questionTargets) {
+        await request("/teacher/questions", "POST", {
+          subject_id: target.subject_id, class_id: target.class_id,
+          section_id: target.section_id, question_text: questionText,
+          options, correct_option: Number(correctOption), points: Number(points),
+        });
+        created += 1;
+      }
       setQuestionText(""); setOptions(["", "", "", ""]); setCorrectOption("0"); setPoints("1");
-      await refresh(); setMessage("Gaaffiin uumameera.");
+      await refresh(); setMessage(`Gaaffiin assignment ${created} irratti galmaa'eera.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Question create failed"); }
     finally { setBusy(false); }
   }
 
   async function uploadCsv(event: FormEvent) {
-    event.preventDefault(); if (!currentAssignment || !csvFile) return;
+    event.preventDefault(); if (!questionTargets.length || !csvFile) return;
     setBusy(true); setMessage("");
     try {
-      const form = new FormData(); form.append("file", csvFile);
-      const query = new URLSearchParams({
-        subject_id: currentAssignment.subject_id, class_id: currentAssignment.class_id,
-        section_id: currentAssignment.section_id,
-      });
-      const response = await fetch(API + "/teacher/questions/upload-csv?" + query.toString(), {
-        method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail ?? "CSV upload failed");
-      setCsvFile(null); await refresh(); setMessage(`Gaaffii ${data.created_count} olkaa'ame.`);
+      let imported = 0;
+      let completedTargets = 0;
+      for (const target of questionTargets) {
+        const form = new FormData(); form.append("file", csvFile);
+        const query = new URLSearchParams({
+          subject_id: target.subject_id, class_id: target.class_id,
+          section_id: target.section_id,
+        });
+        const response = await fetch(API + "/teacher/questions/upload-csv?" + query.toString(), {
+          method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail ?? `CSV upload failed after ${completedTargets} assignments`);
+        imported += Number(data.created_count ?? 0);
+        completedTargets += 1;
+      }
+      setCsvFile(null); await refresh(); setMessage(`${imported} gaaffii assignment ${completedTargets} irratti galmaa'e.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "CSV upload failed"); }
     finally { setBusy(false); }
   }
@@ -248,8 +264,14 @@ export default function TeacherPage() {
       <header className="admin-header"><div><p className="eyebrow">SMARTEXAM ETHIOPIA / V1</p><h1>Teacher Dashboard</h1><p className="muted">Baga nagaan dhuftan, {teacherName}.</p></div><button className="secondary" onClick={logout}>Logout</button></header>
       {message && <p className="feedback">{message}</p>}
       <section className="admin-panel stack">
-        <h2>My Assigned Class / Section / Subject</h2>
-        <select value={selectedAssignment} onChange={e=>{setSelectedAssignment(e.target.value);setExamQuestions([]);setSelectedExam(null);setSubmissions([]);}}>
+        <h2>Question Destination — Assignment</h2>
+        <select value={selectedAssignment} onChange={e=>setSelectedAssignment(e.target.value)}>
+          <option value="__ALL__">All My Assignments</option>
+          {assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}
+        </select>
+        <p className="muted">{selectedAssignment === "__ALL__" ? `Gaaffiin assignment ${assignments.length} hundaaf galmaa'a.` : "Gaaffiin assignment filatame qofaaf galmaa'a."}</p>
+        <h2>Exam Destination — One Assignment</h2>
+        <select value={selectedExamAssignment} onChange={e=>{setSelectedExamAssignment(e.target.value);setExamQuestions([]);setSelectedExam(null);setSubmissions([]);}}>
           {assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}
         </select>
         {!assignments.length && <p className="muted">Admin assignment hin kennamne. Admin qunnamii.</p>}
@@ -261,10 +283,10 @@ export default function TeacherPage() {
             {options.map((option,index)=><label key={index}>Option {String.fromCharCode(65+index)}<input value={option} onChange={e=>setOptions(old=>old.map((v,i)=>i===index?e.target.value:v))} required /></label>)}
             <label>Correct option<select value={correctOption} onChange={e=>setCorrectOption(e.target.value)}>{options.map((_,i)=><option key={i} value={i}>{String.fromCharCode(65+i)}</option>)}</select></label>
             <label>Points<input type="number" min="0.1" max="100" step="0.1" value={points} onChange={e=>setPoints(e.target.value)} required /></label>
-            <button disabled={busy || !currentAssignment}>Save question</button>
+            <button disabled={busy || !questionTargets.length}>Save question</button>
           </form>
           <h3>CSV Upload</h3><p className="muted">Headers: question_text, option_a, option_b, option_c, option_d, correct_option, points</p>
-          <form className="stack" onSubmit={uploadCsv}><input type="file" accept=".csv,text/csv" onChange={e=>setCsvFile(e.target.files?.[0] ?? null)} required /><button disabled={busy || !csvFile || !currentAssignment}>Upload CSV</button></form>
+          <form className="stack" onSubmit={uploadCsv}><input type="file" accept=".csv,text/csv" onChange={e=>setCsvFile(e.target.files?.[0] ?? null)} required /><button disabled={busy || !csvFile || !questionTargets.length}>Upload CSV</button></form>
         </article>
         <article className="admin-panel"><h2>Create Exam</h2>
           <form className="stack" onSubmit={createExam}>
