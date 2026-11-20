@@ -172,8 +172,8 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
         raise HTTPException(status_code=409, detail="You have already submitted this exam")
     submission_id = str(uuid4())
     deadline = current + timedelta(minutes=exam["duration_minutes"])
-    if exam.get("ends_at") and exam["ends_at"] < deadline:
-        deadline = exam["ends_at"]
+    if exam.get("ends_at") and as_utc(exam["ends_at"]) < deadline:
+        deadline = as_utc(exam["ends_at"])
     submission = {
         "_id": submission_id, "exam_id": exam_id, "teacher_id": exam["teacher_id"],
         "student_id": student["_id"], "class_id": enrollment["class_id"],
