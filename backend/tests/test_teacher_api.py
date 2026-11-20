@@ -330,6 +330,11 @@ def test_teacher_cannot_view_or_publish_exam_after_assignment_is_deactivated(tea
     listed = ctx["client"].get("/api/v1/teacher/exams")
     assert listed.status_code == 200
     assert all(item["_id"] != exam_id for item in listed.json())
+    assert ctx["client"].get("/api/v1/teacher/questions").json() == []
+    dashboard = ctx["client"].get("/api/v1/teacher/dashboard")
+    assert dashboard.status_code == 200
+    assert dashboard.json()["counts"]["exams"] == 0
+    assert dashboard.json()["counts"]["questions"] == 0
 
     publish = ctx["client"].post(f"/api/v1/teacher/exams/{exam_id}/publish")
     assert publish.status_code == 403
