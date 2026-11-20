@@ -168,7 +168,7 @@ def test_student_exam_respects_scheduled_start_and_end_deadlines(student_context
     })
     available = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
     assert available.status_code == 200, available.text
-    deadline = available.json()["deadline_at"]
+    deadline = datetime.fromisoformat(available.json()["deadline_at"].replace("Z", "+00:00"))
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
     assert deadline <= datetime.now(timezone.utc) + timedelta(minutes=5, seconds=1)
