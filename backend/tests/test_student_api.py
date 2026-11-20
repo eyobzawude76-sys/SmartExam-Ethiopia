@@ -310,3 +310,53 @@ def test_student_can_retake_only_when_teacher_allows_it(student_context):
 def test_teacher_cannot_access_student_endpoints(student_context):
     response = student_context["client"].get("/api/v1/teacher/dashboard")
     assert response.status_code == 403
+
+def test_student_results_are_private_to_the_authenticated_student(student_context):
+    ctx = student_context
+    own_published = str(uuid.uuid4())
+    own_unpublished = str(uuid.uuid4())
+    another_student_published = str(uuid.uuid4())
+    ctx["db"].submissions.insert_many([
+        {
+            "_id": own_published, "exam_id": ctx["exam_id"],
+            "teacher_id": ctx["teacher_id"], "student_id": ctx["student_id"],
+            "status": "graded", "score": 4, "total_points": 5,
+            "result_published": True,
+        },
+        {
+            "_id": own_unpublished, "exam_id": ctx["exam_id"],
+            "teacher_id": ctx["teacher_id"], "student_id": ctx["student_id"],
+            "status": "graded", "score": 5, "total_points": 5,
+            "result_published": False,
+        },
+        {
+            "_id": another_student_published, "exam_id": ctx["exam_id"],
+            "teacher_id": ctx["teacher_id"], "student_id": str(uuid.uuid4()),
+            "status": "graded", "score": 1, "total_points": 5,
+            "result_published": True,
+        },
+    ])
+
+    response = ctx["client"].get("/api/v1/student/results")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["score"] == 4
+
+
+def test_student_cannot_change_answers_after_submission(student_context):
+    ctx = student_context
+    started = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert started.status_code == 200
+    submission_id = started.json()["submission_id"]
+    submitted = ctx["client"].post(f"/api/v1/student/submissions/{submission_id}/submit")
+    assert submitted.status_code == 200
+
+    changed = ctx["client"].patch(
+        f"/api/v1/student/submissions/{submission_id}/answers",
+        json={"answers": [{"question_id": ctx["question_id"], "selected_option": 1}]},
+    )
+    assert changed.status_code == 404
+    record = ctx["db"].submissions.find_one({"_id": submission_id})
+    assert record["answers"] == []
+    assert record["status"] == "submitted"
+
