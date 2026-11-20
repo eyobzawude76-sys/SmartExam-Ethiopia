@@ -157,7 +157,7 @@ async def create_exam(payload: TeacherExamInput, db=Depends(get_db),
         "section_id": payload.section_id, "question_ids": payload.question_ids,
         "questions_snapshot": [{
             "question_id": q["_id"], "question_text": q["question_text"],
-            "options": q["options"], "points": q["points"],
+            "options": q["options"], "correct_option": q["correct_option"], "points": q["points"],
         } for q in questions],
         "total_points": sum(q["points"] for q in questions),
         "duration_minutes": payload.duration_minutes, "starts_at": payload.starts_at,
