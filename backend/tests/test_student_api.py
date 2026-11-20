@@ -153,6 +153,27 @@ def test_student_saved_answers_are_auto_submitted_after_deadline(student_context
 
 
 
+
+def test_student_exam_respects_scheduled_start_and_end_deadlines(student_context):
+    ctx = student_context
+    future_start = datetime.now(timezone.utc) + timedelta(minutes=5)
+    ctx["db"].exams.update_one({"_id": ctx["exam_id"]}, {"$set": {"starts_at": future_start}})
+    unavailable = ctx["client"].get("/api/v1/student/exams")
+    assert unavailable.status_code == 200
+    assert unavailable.json() == []
+
+    ctx["db"].exams.update_one({"_id": ctx["exam_id"]}, {
+        "$set": {"starts_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+                 "ends_at": datetime.now(timezone.utc) + timedelta(minutes=5)}
+    })
+    available = ctx["client"].post(f"/api/v1/student/exams/{ctx['exam_id']}/start")
+    assert available.status_code == 200, available.text
+    deadline = available.json()["deadline_at"]
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    assert deadline <= datetime.now(timezone.utc) + timedelta(minutes=5, seconds=1)
+
+
 def test_student_cannot_access_exam_when_assigned_teacher_is_inactive(student_context):
     ctx = student_context
     ctx["db"].users.update_one({"_id": ctx["teacher_id"]}, {"$set": {"is_active": False}})
