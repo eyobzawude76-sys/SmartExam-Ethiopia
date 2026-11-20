@@ -12,6 +12,12 @@ def now():
     return datetime.now(timezone.utc)
 
 
+def as_utc(value):
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 async def student_account(user=Depends(get_current_user)):
     if user.get("role") != "STUDENT":
         raise HTTPException(status_code=403, detail="Student access required")
@@ -32,9 +38,9 @@ def exam_is_available(exam, current):
         return False
     starts = exam.get("starts_at")
     ends = exam.get("ends_at")
-    if starts and starts > current:
+    if starts and as_utc(starts) > current:
         return False
-    if ends and ends <= current:
+    if ends and as_utc(ends) <= current:
         return False
     return True
 
@@ -94,10 +100,10 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
         "exam_id": exam_id, "student_id": student["_id"], "status": "in_progress",
     })
     if existing:
-        if existing["deadline_at"] <= current:
+        if as_utc(existing["deadline_at"]) <= current:
             await db.submissions.update_one(
                 {"_id": existing["_id"], "status": "in_progress"},
-                {"$set": {"status": "submitted", "submitted_at": existing["deadline_at"], "auto_submitted": True}},
+                {"$set": {"status": "submitted", "submitted_at": as_utc(existing["deadline_at"]), "auto_submitted": True}},
             )
             raise HTTPException(status_code=409, detail="Exam time ended. Your saved answers were auto-submitted.")
         return {
@@ -137,10 +143,10 @@ async def save_answers(submission_id: str, payload: StudentSaveAnswersInput,
     })
     if submission is None:
         raise HTTPException(status_code=404, detail="Active exam attempt not found")
-    if submission["deadline_at"] <= current:
+    if as_utc(submission["deadline_at"]) <= current:
         await db.submissions.update_one(
             {"_id": submission_id, "status": "in_progress"},
-            {"$set": {"status": "submitted", "submitted_at": submission["deadline_at"], "auto_submitted": True}},
+            {"$set": {"status": "submitted", "submitted_at": as_utc(submission["deadline_at"]), "auto_submitted": True}},
         )
         raise HTTPException(status_code=409, detail="Time ended. Saved answers were submitted automatically.")
     exam = await db.exams.find_one({"_id": submission["exam_id"]})
@@ -162,8 +168,9 @@ async def submit_exam(submission_id: str, db=Depends(get_db), student=Depends(st
     })
     if submission is None:
         raise HTTPException(status_code=404, detail="Active exam attempt not found")
-    submitted_at = min(current, submission["deadline_at"])
-    auto_submitted = current >= submission["deadline_at"]
+    deadline = as_utc(submission["deadline_at"])
+    submitted_at = min(current, deadline)
+    auto_submitted = current >= deadline
     await db.submissions.update_one({"_id": submission_id, "status": "in_progress"}, {
         "$set": {"status": "submitted", "submitted_at": submitted_at, "auto_submitted": auto_submitted},
     })
