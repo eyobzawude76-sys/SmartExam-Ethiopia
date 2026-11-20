@@ -40,6 +40,10 @@ def student_context():
             "_id": teacher_id, "username": f"teacher_{uuid.uuid4().hex[:8]}",
             "full_name": "Assigned Teacher", "role": "TEACHER", "is_active": True,
         })
+        db.teacher_assignments.insert_one({
+            "_id": str(uuid.uuid4()), "teacher_id": teacher_id, "subject_id": subject_id,
+            "class_id": class_id, "section_id": section_id, "is_active": True,
+        })
         question_id = str(uuid.uuid4())
         exam_id = str(uuid.uuid4())
         db.exams.insert_one({
