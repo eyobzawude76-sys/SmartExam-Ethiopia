@@ -294,6 +294,11 @@ async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_d
 
 @router.get("/exams/{exam_id}/submissions")
 async def list_exam_submissions(exam_id: str, db=Depends(get_db), teacher=Depends(teacher_account)):
+    exam = await db.exams.find_one({"_id": exam_id, "teacher_id": teacher["_id"]})
+    if exam is None:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    # Authorize the active assignment before performing deadline finalization.
+    await require_exam_assignment(db, teacher["_id"], exam)
     current = now()
     expired = await db.submissions.find({
         "exam_id": exam_id, "teacher_id": teacher["_id"], "status": "in_progress",
@@ -307,10 +312,6 @@ async def list_exam_submissions(exam_id: str, db=Depends(get_db), teacher=Depend
             {"_id": attempt["_id"], "status": "in_progress"},
             {"$set": {"status": "submitted", "submitted_at": deadline, "auto_submitted": True}},
         )
-    exam = await db.exams.find_one({"_id": exam_id, "teacher_id": teacher["_id"]})
-    if exam is None:
-        raise HTTPException(status_code=404, detail="Exam not found")
-    await require_exam_assignment(db, teacher["_id"], exam)
     submissions = await db.submissions.find(
         {"exam_id": exam_id, "teacher_id": teacher["_id"]},
         {"answers": 1, "student_id": 1, "status": 1, "score": 1, "total_points": 1,
