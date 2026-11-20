@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pymongo.errors import DuplicateKeyError
 
 from app.dependencies import get_db, get_current_user
-from app.teacher_schemas import TeacherQuestionInput, TeacherExamInput, SubmissionGradeInput
+from app.teacher_schemas import TeacherQuestionInput, TeacherExamInput, TeacherPublishExamsInput, SubmissionGradeInput
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 logger = logging.getLogger(__name__)
@@ -184,6 +184,27 @@ async def publish_exam(exam_id: str, db=Depends(get_db), teacher=Depends(teacher
         raise HTTPException(status_code=422, detail="An exam must contain questions before publishing")
     await db.exams.update_one({"_id": exam_id}, {"$set": {"status": "published", "published_at": now()}})
     return {"id": exam_id, "status": "published"}
+
+
+@router.post("/exams/publish-batch")
+async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_db),
+                             teacher=Depends(teacher_account)):
+    exams = await db.exams.find({
+        "_id": {"$in": payload.exam_ids}, "teacher_id": teacher["_id"],
+    }).to_list(100)
+    if len(exams) != len(payload.exam_ids):
+        raise HTTPException(status_code=404, detail="One or more exams were not found")
+    if any(exam.get("status") != "draft" for exam in exams):
+        raise HTTPException(status_code=409, detail="Every selected exam must still be a draft")
+    if any(not exam.get("questions_snapshot") for exam in exams):
+        raise HTTPException(status_code=422, detail="Every exam must contain questions before publishing")
+    now_value = now()
+    result = await db.exams.update_many({
+        "_id": {"$in": payload.exam_ids}, "teacher_id": teacher["_id"], "status": "draft",
+    }, {"$set": {"status": "published", "published_at": now_value}})
+    if result.modified_count != len(payload.exam_ids):
+        raise HTTPException(status_code=409, detail="Not all selected exams could be published")
+    return {"published_count": result.modified_count, "status": "published"}
 
 
 @router.get("/exams/{exam_id}/submissions")
