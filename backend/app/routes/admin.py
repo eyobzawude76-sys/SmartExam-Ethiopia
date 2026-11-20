@@ -175,9 +175,25 @@ async def teacher_assignments(teacher_id: str, db=Depends(get_db), _=Depends(req
 
 @router.patch("/users/{user_id}/status")
 async def set_user_status(user_id: str, payload: UserStatusInput, db=Depends(get_db), admin=Depends(require_admin)):
-    result = await db.users.update_one({"_id": user_id, "role": {"$in": ["TEACHER", "STUDENT"]}}, {"$set": {"is_active": payload.is_active, "updated_at": now()}})
-    if result.matched_count == 0:
+    user = await db.users.find_one(
+        {"_id": user_id, "role": {"$in": ["TEACHER", "STUDENT"]}},
+        {"_id": 1, "role": 1},
+    )
+    if user is None:
         raise HTTPException(status_code=404, detail="Teacher or student not found")
+
+    timestamp = now()
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$set": {"is_active": payload.is_active, "updated_at": timestamp}},
+    )
+
+    # Keep role-specific records consistent with the account's active state.
+    related_collection = "teacher_assignments" if user["role"] == "TEACHER" else "student_enrollments"
+    await db[related_collection].update_many(
+        {("teacher_id" if user["role"] == "TEACHER" else "student_id"): user_id},
+        {"$set": {"is_active": payload.is_active, "updated_at": timestamp}},
+    )
     return {"id": user_id, "is_active": payload.is_active}
 
 
