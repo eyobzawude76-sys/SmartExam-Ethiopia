@@ -1,9 +1,40 @@
+from datetime import datetime, timezone
+import secrets
+from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
+from pymongo.errors import DuplicateKeyError
+from app.core.config import get_settings
 from app.core.security import verify_password, hash_password, create_access_token
 from app.dependencies import get_db, get_current_user, get_user_for_password_change
-from app.schemas import LoginInput, PasswordChangeInput
+from app.schemas import BootstrapAdminInput, LoginInput, PasswordChangeInput
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+@router.post("/bootstrap-admin", status_code=201)
+async def bootstrap_admin(payload: BootstrapAdminInput, db=Depends(get_db)):
+    """Create the first Admin only when a deployment-only bootstrap token is configured."""
+    settings = get_settings()
+    expected_token = settings.admin_bootstrap_token
+    if not expected_token or not secrets.compare_digest(payload.bootstrap_token, expected_token):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bootstrap is unavailable")
+    if await db.users.count_documents({"role": "ADMIN"}) > 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An Admin already exists")
+    user = {
+        "_id": str(uuid4()),
+        "username": payload.username,
+        "full_name": payload.full_name,
+        "password_hash": hash_password(payload.password),
+        "role": "ADMIN",
+        "is_active": True,
+        "must_change_password": True,
+        "created_at": datetime.now(timezone.utc),
+    }
+    try:
+        await db.users.insert_one(user)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Admin or username already exists")
+    return {"message": "Initial Admin created. Remove ADMIN_BOOTSTRAP_TOKEN from deployment environment now.", "username": user["username"], "role": "ADMIN", "must_change_password": True}
 
 
 @router.post("/login")
