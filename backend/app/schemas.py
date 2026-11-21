@@ -4,6 +4,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 Role = Literal["ADMIN", "TEACHER", "STUDENT"]
 
 
+class BootstrapAdminInput(BaseModel):
+    bootstrap_token: str = Field(min_length=32, max_length=256)
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")
+    full_name: str = Field(min_length=2, max_length=120)
+    password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def normalize_bootstrap_full_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
 class LoginInput(BaseModel):
     username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")
     password: str = Field(min_length=8, max_length=128)
