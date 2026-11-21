@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     jwt_algorithm: Literal["HS256"] = "HS256"
     access_token_expire_minutes: int = Field(default=30, ge=5, le=1440)
     frontend_origin: str = "http://localhost:3000"
+    admin_bootstrap_token: str | None = Field(default=None, min_length=32)
 
     @model_validator(mode="after")
     def reject_insecure_production_defaults(self):
