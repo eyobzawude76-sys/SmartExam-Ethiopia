@@ -34,6 +34,19 @@ Configure these as private backend environment variables in the hosting provider
 
 The API rejects a placeholder JWT secret and non-HTTPS frontend origin in production. **Before exposing the login endpoint publicly, configure shared rate limiting at the hosting/WAF layer or add a shared Redis-backed limiter.** Login rate limiting is not yet implemented in this V1 API; do not rely on an in-process memory counter for a multi-worker deployment. For the Next.js hosting provider, set `NEXT_PUBLIC_API_BASE_URL=https://your-api.example/api/v1` to the deployed HTTPS API URL. This value is public frontend configuration; never place JWT or MongoDB secrets in a `NEXT_PUBLIC_*` variable. The repository does not contain or verify the hosting provider's live environment variables; verify these settings in both provider dashboards before deployment.
 
+### MongoDB Atlas connection (SmartExam V1)
+
+1. In Atlas, create a dedicated database user for this application. Grant only the database permissions it needs; do not reuse your Atlas account login.
+2. In **Network Access**, allow the backend host's outbound IP addresses. Avoid a permanent `0.0.0.0/0` rule; if the host has changing outbound IPs, use its documented outbound ranges or an appropriate private networking option.
+3. In **Connect → Drivers**, copy the Python `mongodb+srv://` connection string. If the database-user password contains special characters, URL-encode them before inserting the password into the URI.
+4. In the backend hosting dashboard (Render), add these private environment variables:
+   - `MONGODB_URI` = the Atlas connection string (keep it secret; never commit it or put it in a `NEXT_PUBLIC_*` variable).
+   - `MONGODB_DATABASE=smart_exam_ethiopia` = the V1 database name. The backend selects this configured database explicitly, even if the URI path contains a different database name.
+   - Keep `APP_ENV=production`, `JWT_SECRET_KEY`, and `FRONTEND_ORIGIN` configured as described above.
+5. Redeploy/restart the backend. Application startup runs MongoDB `ping` and creates the required indexes; if Atlas authentication, DNS, TLS, network access, or index creation fails, startup fails rather than silently using a disconnected database.
+
+The `/health` endpoint reports whether the application has initialized its database handle; the definitive initial connectivity check is the MongoDB ping during startup. Do not share Atlas passwords or full connection strings in chat, screenshots, GitHub, or frontend variables. If a credential has been exposed, rotate it in Atlas before using the connection.
+
 ## 3. Create the first Admin
 Run once from the `backend/` directory:
 
