@@ -115,7 +115,7 @@ async def list_questions(subject_id: str | None = None, class_id: str | None = N
     for key, value in (("subject_id", subject_id), ("class_id", class_id), ("section_id", section_id)):
         if value:
             query[key] = value
-    return await db.questions.find(query).sort("created_at", -1).to_list(1000)
+    return await db.questions.find(query, {"correct_option": 0}).sort("created_at", -1).to_list(1000)
 
 
 @router.post("/questions", status_code=201)
