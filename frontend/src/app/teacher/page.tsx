@@ -6,7 +6,7 @@ const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v
 
 type Assignment = { subject_id: string; class_id: string; section_id: string; subject_name: string; class_name: string; section_name: string };
 type Question = { _id: string; subject_id: string; class_id: string; section_id: string; question_text: string; options: string[]; points: number };
-type Exam = { _id: string; title: string; subject_id: string; class_id: string; section_id: string; question_ids: string[]; questions_snapshot?: { question_id: string; question_text: string; options: string[]; correct_option: number; points: number }[]; duration_minutes: number; allow_retakes: boolean; status: string };
+type Exam = { _id: string; title: string; subject_id: string; class_id: string; section_id: string; question_ids: string[]; questions_snapshot?: { question_id: string; question_text: string; options: string[]; points: number }[]; duration_minutes: number; allow_retakes: boolean; status: string };
 type Submission = { _id: string; student_id: string; student?: { full_name: string; username: string }; answers: { question_id: string; selected_option?: number }[]; status: string; score?: number; total_points?: number; result_published?: boolean };
 
 export default function TeacherPage() {
@@ -29,7 +29,6 @@ export default function TeacherPage() {
   const [distributedExamIds, setDistributedExamIds] = useState<string[]>([]);
   const [questionText, setQuestionText] = useState("");
   const [options, setOptions] = useState(["", "", "", ""]);
-  const [correctOption, setCorrectOption] = useState("0");
   const [points, setPoints] = useState("1");
   const [examTitle, setExamTitle] = useState("");
   const [examQuestions, setExamQuestions] = useState<string[]>([]);
@@ -150,11 +149,11 @@ export default function TeacherPage() {
         await request("/teacher/questions", "POST", {
           subject_id: target.subject_id, class_id: target.class_id,
           section_id: target.section_id, question_text: questionText,
-          options, correct_option: Number(correctOption), points: Number(points),
+          options, points: Number(points),
         });
         created += 1;
       }
-      setQuestionText(""); setOptions(["", "", "", ""]); setCorrectOption("0"); setPoints("1");
+      setQuestionText(""); setOptions(["", "", "", ""]); setPoints("1");
       await refresh(); setMessage(`Gaaffiin assignment ${created} irratti galmaa'eera.`);
     } catch (error) {
       if (created) await refresh().catch(() => undefined);
@@ -332,11 +331,10 @@ export default function TeacherPage() {
           <form className="stack" onSubmit={createQuestion}>
             <label>Question<input value={questionText} onChange={e=>setQuestionText(e.target.value)} minLength={5} required /></label>
             {options.map((option,index)=><label key={index}>Option {String.fromCharCode(65+index)}<input value={option} onChange={e=>setOptions(old=>old.map((v,i)=>i===index?e.target.value:v))} required /></label>)}
-            <label>Correct option<select value={correctOption} onChange={e=>setCorrectOption(e.target.value)}>{options.map((_,i)=><option key={i} value={i}>{String.fromCharCode(65+i)}</option>)}</select></label>
             <label>Points<input type="number" min="0.1" max="100" step="0.1" value={points} onChange={e=>setPoints(e.target.value)} required /></label>
             <button disabled={busy || !questionTargets.length}>Save question</button>
           </form>
-          <h3>CSV Upload</h3><p className="muted">Headers: question_text, option_a, option_b, option_c, option_d, correct_option, points</p>
+          <h3>CSV Upload</h3><p className="muted">Headers: question_text, option_a, option_b, option_c, option_d, points</p>
           <form className="stack" onSubmit={uploadCsv}><input type="file" accept=".csv,text/csv" onChange={e=>setCsvFile(e.target.files?.[0] ?? null)} required /><button disabled={busy || !csvFile || !questionTargets.length}>Upload CSV</button></form>
         </article>
         <article className="admin-panel"><h2>Create Exam</h2>
@@ -364,7 +362,7 @@ export default function TeacherPage() {
               const answer = sub.answers?.find(item=>item.question_id===q.question_id);
               const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
               return <div className="grade-row" key={q.question_id}>
-              <span>{q.question_text}<small>Correct answer: {q.options[q.correct_option] ?? "Unavailable"} · Student answer: {answerLabel} · {q.points} points</small></span>
+              <span>{q.question_text}<small>Student answer: {answerLabel} · {q.points} points</small></span>
               <select value={grading[sub._id]?.[q.question_id] === undefined ? "" : String(grading[sub._id][q.question_id])} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
                 <option value="">Choose ✓ / X</option><option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
               </select>

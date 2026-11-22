@@ -84,6 +84,8 @@ def test_teacher_can_create_question_and_publish_exam(teacher_context):
     assert created.status_code == 201, created.text
     assert "correct_option" not in created.json()
     question_id = created.json()["_id"]
+    stored_question = ctx["db"].questions.find_one({"_id": question_id})
+    assert "correct_option" not in stored_question
 
     exam = ctx["client"].post("/api/v1/teacher/exams", json={
         "title": "Math Test", "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
@@ -145,8 +147,8 @@ def test_teacher_can_work_with_multiple_assigned_class_section_subject_combinati
 def test_teacher_csv_upload_creates_questions(teacher_context):
     ctx = teacher_context
     csv_data = (
-        "question_text,option_a,option_b,option_c,option_d,correct_option,points\n"
-        "What is 3 + 3?,4,5,6,7,C,2\n"
+        "question_text,option_a,option_b,option_c,option_d,points\n"
+        "What is 3 + 3?,4,5,6,7,2\n"
     )
     response = ctx["client"].post(
         "/api/v1/teacher/questions/upload-csv",
@@ -244,7 +246,6 @@ def test_teacher_can_distribute_one_exam_to_all_assignments_and_publish_together
     for snapshot in snapshots:
         assert snapshot[0]["question_text"] == "What is 5 + 5?"
         assert snapshot[0]["options"] == ["8", "9", "10", "11"]
-        assert snapshot[0]["correct_option"] == 2
         assert snapshot[0]["points"] == 2
     question_ids = [snapshot[0]["question_id"] for snapshot in snapshots]
     assert len(set(question_ids)) == 2
@@ -271,8 +272,8 @@ def test_teacher_csv_upload_rejects_malformed_rows_without_server_error(teacher_
     }
 
     short_row = (
-        "question_text,option_a,option_b,option_c,option_d,correct_option,points\n"
-        "Question with missing option, A, B, C, ,C,1\n"
+        "question_text,option_a,option_b,option_c,option_d,points\n"
+        "Question with missing option, A, B, C, ,1\n"
     )
     response = ctx["client"].post(
         url, params=params, files={"file": ("short.csv", short_row, "text/csv")}
@@ -280,8 +281,8 @@ def test_teacher_csv_upload_rejects_malformed_rows_without_server_error(teacher_
     assert response.status_code == 422, response.text
 
     duplicate_headers = (
-        "question_text,option_a,option_b,option_c,option_c,correct_option,points\n"
-        "Duplicate header question,A,B,C,D,C,1\n"
+        "question_text,option_a,option_b,option_c,option_c,points\n"
+        "Duplicate header question,A,B,C,D,1\n"
     )
     response = ctx["client"].post(
         url, params=params, files={"file": ("duplicate.csv", duplicate_headers, "text/csv")}

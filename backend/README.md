@@ -103,4 +103,4 @@ $env:JWT_SECRET_KEY="test-only-secret-key-at-least-32-characters-long"
 pytest -q
 ```
 
-The tests cover unauthenticated access, Admin login, academic structure creation, Teacher and Student creation, assignment validation, password hashing, and Teacher role denial. CI also compiles Python and type-checks/builds the Next.js frontend. Use the repository's **Actions** tab to see the actual run result; a committed workflow or test file alone is not evidence that tests passed.
+The pytest suite covers Admin APIs, Teacher assignment-scoped question/exam workflows, CSV import, manual per-student grading and result publication, Student exam access, timed attempts, auto-submit, and result visibility. CI compiles Python and runs the complete pytest suite, then lints, type-checks, and builds the Next.js frontend. Use the repository's **Actions** tab to see the actual run result; a committed workflow or test file alone is not evidence that tests passed.

@@ -45,7 +45,7 @@ def question_document(payload: TeacherQuestionInput, teacher_id: str):
         "_id": str(uuid4()), "teacher_id": teacher_id,
         "subject_id": payload.subject_id, "class_id": payload.class_id,
         "section_id": payload.section_id, "question_text": payload.question_text,
-        "options": payload.options, "correct_option": payload.correct_option,
+        "options": payload.options,
         "points": payload.points, "is_active": True, "created_at": now(),
     }
 
@@ -124,8 +124,7 @@ async def create_question(payload: TeacherQuestionInput, db=Depends(get_db),
     await require_assignment(db, teacher["_id"], payload.subject_id, payload.class_id, payload.section_id)
     doc = question_document(payload, teacher["_id"])
     await db.questions.insert_one(doc)
-    safe = {key: value for key, value in doc.items() if key != "correct_option"}
-    return safe
+    return doc
 
 
 @router.post("/questions/upload-csv", status_code=201)
@@ -141,9 +140,9 @@ async def upload_questions_csv(file: UploadFile = File(...), subject_id: str = "
     try:
         text = raw.decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(text))
-        required = {"question_text", "option_a", "option_b", "option_c", "option_d", "correct_option"}
+        required = {"question_text", "option_a", "option_b", "option_c", "option_d"}
         if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
-            raise ValueError("CSV headers must include question_text, option_a, option_b, option_c, option_d, correct_option")
+            raise ValueError("CSV headers must include question_text, option_a, option_b, option_c, option_d")
         if len(reader.fieldnames) != len(set(reader.fieldnames)):
             raise ValueError("CSV headers must not contain duplicate columns")
         docs = []
@@ -151,15 +150,11 @@ async def upload_questions_csv(file: UploadFile = File(...), subject_id: str = "
             if None in row:
                 raise ValueError(f"CSV row {row_number} contains more values than the header")
             options = [(row.get(f"option_{letter}") or "").strip() for letter in "abcd"]
-            answer = (row.get("correct_option") or "").strip().upper()
-            if answer not in {"A", "B", "C", "D", "1", "2", "3", "4"}:
-                raise ValueError(f"Invalid correct_option on CSV row {row_number}")
-            correct_index = ord(answer) - ord("A") if answer in {"A", "B", "C", "D"} else int(answer) - 1
             points_text = (row.get("points") or "1").strip()
             payload = TeacherQuestionInput(
                 subject_id=subject_id, class_id=class_id, section_id=section_id,
                 question_text=row.get("question_text", ""), options=options,
-                correct_option=correct_index, points=float(points_text),
+                points=float(points_text),
             )
             docs.append(question_document(payload, teacher["_id"]))
         if not docs:
@@ -189,7 +184,7 @@ async def create_exam(payload: TeacherExamInput, db=Depends(get_db),
         "section_id": payload.section_id, "question_ids": payload.question_ids,
         "questions_snapshot": [{
             "question_id": q["_id"], "question_text": q["question_text"],
-            "options": q["options"], "correct_option": q["correct_option"], "points": q["points"],
+            "options": q["options"], "points": q["points"],
         } for q in questions],
         "total_points": sum(q["points"] for q in questions),
         "duration_minutes": payload.duration_minutes, "starts_at": payload.starts_at,
@@ -219,7 +214,7 @@ async def distribute_exam(payload: TeacherDistributeExamInput, db=Depends(get_db
         exam_id = str(uuid4())
         snapshot = [{
             "question_id": str(uuid4()), "question_text": q["question_text"],
-            "options": q["options"], "correct_option": q["correct_option"], "points": q["points"],
+            "options": q["options"], "points": q["points"],
         } for q in questions]
         exam = {
             "_id": exam_id, "teacher_id": teacher["_id"], "title": payload.title,
@@ -249,9 +244,14 @@ async def list_exams(db=Depends(get_db), teacher=Depends(teacher_account)):
     } for item in assignments]
     if not scopes:
         return []
-    return await db.exams.find({
+    exams = await db.exams.find({
         "teacher_id": teacher["_id"], "$or": scopes,
     }).sort("created_at", -1).to_list(500)
+    # Never expose legacy answer-key fields in teacher-facing exam payloads.
+    for exam in exams:
+        for question in exam.get("questions_snapshot", []):
+            question.pop("correct_option", None)
+    return exams
 
 
 @router.post("/exams/{exam_id}/publish")
