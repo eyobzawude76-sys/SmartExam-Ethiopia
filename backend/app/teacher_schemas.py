@@ -8,13 +8,10 @@ class TeacherQuestionInput(BaseModel):
     section_id: str = Field(min_length=1)
     question_text: str = Field(min_length=5, max_length=2000)
     options: list[str] = Field(min_length=2, max_length=5)
-    correct_option: int = Field(ge=0, le=4)
     points: float = Field(default=1, gt=0, le=100)
 
     @model_validator(mode="after")
     def validate_options(self):
-        if self.correct_option >= len(self.options):
-            raise ValueError("correct_option must identify an existing option")
         if any(not option.strip() for option in self.options):
             raise ValueError("Options cannot be empty")
         self.options = [option.strip() for option in self.options]
