@@ -115,7 +115,7 @@ async def list_questions(subject_id: str | None = None, class_id: str | None = N
     for key, value in (("subject_id", subject_id), ("class_id", class_id), ("section_id", section_id)):
         if value:
             query[key] = value
-    return await db.questions.find(query, {"correct_option": 0}).sort("created_at", -1).to_list(1000)
+    return await db.questions.find(query).sort("created_at", -1).to_list(1000)
 
 
 @router.post("/questions", status_code=201)
@@ -244,9 +244,14 @@ async def list_exams(db=Depends(get_db), teacher=Depends(teacher_account)):
     } for item in assignments]
     if not scopes:
         return []
-    return await db.exams.find({
+    exams = await db.exams.find({
         "teacher_id": teacher["_id"], "$or": scopes,
     }).sort("created_at", -1).to_list(500)
+    # Never expose legacy answer-key fields in teacher-facing exam payloads.
+    for exam in exams:
+        for question in exam.get("questions_snapshot", []):
+            question.pop("correct_option", None)
+    return exams
 
 
 @router.post("/exams/{exam_id}/publish")
