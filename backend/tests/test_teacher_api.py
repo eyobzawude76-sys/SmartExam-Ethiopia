@@ -83,6 +83,8 @@ def test_teacher_can_create_question_and_publish_exam(teacher_context):
     created = ctx["client"].post("/api/v1/teacher/questions", json=question_payload)
     assert created.status_code == 201, created.text
     assert "correct_option" not in created.json()
+    stored_question = ctx["db"].questions.find_one({"_id": question_id})
+    assert "correct_option" not in stored_question
     question_id = created.json()["_id"]
 
     exam = ctx["client"].post("/api/v1/teacher/exams", json={
