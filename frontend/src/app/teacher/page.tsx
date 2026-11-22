@@ -362,7 +362,7 @@ export default function TeacherPage() {
               const answer = sub.answers?.find(item=>item.question_id===q.question_id);
               const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
               return <div className="grade-row" key={q.question_id}>
-              <span>{q.question_text}<small>Correct answer: {q.options[q.correct_option] ?? "Unavailable"} · Student answer: {answerLabel} · {q.points} points</small></span>
+              <span>{q.question_text}<small>Student answer: {answerLabel} · {q.points} points</small></span>
               <select value={grading[sub._id]?.[q.question_id] === undefined ? "" : String(grading[sub._id][q.question_id])} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
                 <option value="">Choose ✓ / X</option><option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
               </select>
