@@ -33,7 +33,7 @@ A role-based online examination system for Ethiopian secondary schools (Grades 1
 
 ## Development status
 
-Admin phase: initial FastAPI authentication, Admin setup APIs, first-Admin bootstrap script, and `/admin` dashboard UI have been committed. Runtime verification against MongoDB and browser testing are still pending. Teacher implementation starts only after Admin is validated.
+V1 implementation includes Admin setup, Teacher MCQ question/exam management, per-student manual ✓/X grading and individual result publication, plus Student exam attempts, timed auto-submit, and published-result visibility. Backend integration tests cover Admin, Teacher, Student, and their end-to-end lifecycle; frontend lint/type-check/build are included in CI. Hosted MongoDB connectivity and real-browser end-to-end verification remain deployment checks.
 
 ## Security
 
