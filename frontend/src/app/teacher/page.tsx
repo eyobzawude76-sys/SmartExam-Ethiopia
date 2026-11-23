@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { oromoErrorMessage } from "../oromo-errors";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -40,13 +41,20 @@ export default function TeacherPage() {
   const [busy, setBusy] = useState(false);
 
   async function request(path: string, method = "GET", body?: unknown) {
-    const response = await fetch(API + path, {
-      method,
-      headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    let response: Response;
+    try {
+      response = await fetch(API + path, {
+        method,
+        headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (error) {
+      throw new Error(oromoErrorMessage(error, "Serverii waliin wal qunnamuu hin dandeenye. Intarneetii kee mirkaneeffadhu."));
+    }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail ?? "Request failed");
+    if (!response.ok) {
+      throw new Error(oromoErrorMessage(`${response.status} ${data.detail ?? data.error ?? ""}`, "Gaaffii kee raawwachuun hin danda'amne. Odeeffannoo galchite mirkaneeffadhu."));
+    }
     return data;
   }
 
@@ -83,7 +91,7 @@ export default function TeacherPage() {
     // Authenticated state starts the teacher dashboard data load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (token && !mustChange) refresh().catch(error => {
-      setMessage(error instanceof Error ? error.message : "Session expired");
+      setMessage(oromoErrorMessage(error, "Yeroon seensaa kee xumurameera. Irra deebi'ii seeni."));
       setToken("");
       window.sessionStorage.removeItem("smartExamTeacherToken");
       window.sessionStorage.removeItem("smartExamTeacherMustChangePassword");
@@ -107,13 +115,13 @@ export default function TeacherPage() {
         body: JSON.stringify({ username, password }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail ?? "Login failed");
+      if (!response.ok) throw new Error(oromoErrorMessage(`${response.status} ${data.detail ?? data.error ?? ""}`, "Seenuun hin milkoofne. Username fi password kee mirkaneeffadhu."));
       if (data.user.role !== "TEACHER") throw new Error("Kun Teacher account miti.");
       window.sessionStorage.setItem("smartExamTeacherToken", data.access_token);
       window.sessionStorage.setItem("smartExamTeacherMustChangePassword", String(Boolean(data.user.must_change_password)));
       setMustChange(Boolean(data.user.must_change_password)); setToken(data.access_token); setPassword("");
       setMessage("Teacher seenteera.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Login failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Seenuun hin milkoofne. Username fi password kee mirkaneeffadhu.")); }
     finally { setBusy(false); }
   }
 
@@ -128,7 +136,7 @@ export default function TeacherPage() {
       window.sessionStorage.setItem("smartExamTeacherMustChangePassword", "false");
       setMustChange(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
       setMessage("Password jijjiirameera.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Password change failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Password jijjiiruu hin dandeenye. Password durii fi haaraa mirkaneeffadhu.")); }
     finally { setBusy(false); }
   }
 
@@ -157,7 +165,7 @@ export default function TeacherPage() {
       await refresh(); setMessage(`Gaaffiin assignment ${created} irratti galmaa'eera.`);
     } catch (error) {
       if (created) await refresh().catch(() => undefined);
-      const detail = error instanceof Error ? error.message : "Question create failed";
+      const detail = oromoErrorMessage(error, "Gaaffii uumuu hin dandeenye. Odeeffannoo galchite mirkaneeffadhu.");
       setMessage(created ? `${detail}. Gaaffiin assignment ${created} irratti galmaa'eera; hafan hin milkoofne.` : detail);
     }
     finally { setBusy(false); }
@@ -179,14 +187,14 @@ export default function TeacherPage() {
           method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
         });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.detail ?? `CSV upload failed after ${completedTargets} assignments`);
+        if (!response.ok) throw new Error(oromoErrorMessage(`${response.status} ${data.detail ?? data.error ?? ""}`, "Faayila CSV fe'uun hin milkoofne. Qabiyyee fi format faayilaa mirkaneeffadhu."));
         imported += Number(data.created_count ?? 0);
         completedTargets += 1;
       }
       setCsvFile(null); await refresh(); setMessage(`${imported} gaaffii assignment ${completedTargets} irratti galmaa'e.`);
     } catch (error) {
       if (completedTargets) await refresh().catch(() => undefined);
-      const detail = error instanceof Error ? error.message : "CSV upload failed";
+      const detail = oromoErrorMessage(error, "Faayila CSV fe'uun hin milkoofne. Qabiyyee fi format faayilaa mirkaneeffadhu.");
       setMessage(completedTargets ? `${detail}. Gaaffii ${imported} assignment ${completedTargets} irratti galmaa'eera; hafan hin milkoofne.` : detail);
     }
     finally { setBusy(false); }
@@ -222,7 +230,7 @@ export default function TeacherPage() {
     } catch (error) {
       setDistributedExamIds(createdIds);
       if (createdIds.length) await refresh().catch(() => undefined);
-      const detail = error instanceof Error ? error.message : "Exam create failed";
+      const detail = oromoErrorMessage(error, "Qormaata uumuu hin dandeenye. Odeeffannoo fi gaaffilee filataman mirkaneeffadhu.");
       setMessage(createdIds.length ? `${detail}. Exam draft ${createdIds.length} assignment irratti uumameera; hafan hin milkoofne.` : detail);
     }
     finally { setBusy(false); }
@@ -236,21 +244,21 @@ export default function TeacherPage() {
       setDistributedExamIds([]);
       await refresh();
       setMessage(`Exam ${result.published_count} assignment irratti publish ta'eera.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Bulk publish failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Qormaatawwan filataman maxxansuu hin dandeenye.")); }
     finally { setBusy(false); }
   }
 
   async function publishExam(exam: Exam) {
     setBusy(true);
     try { await request(`/teacher/exams/${exam._id}/publish`, "POST"); await refresh(); setMessage("Exam publish ta'eera."); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Publish failed"); }
+    catch (error) { setMessage(oromoErrorMessage(error, "Qormaata maxxansuu hin dandeenye.")); }
     finally { setBusy(false); }
   }
 
   async function openSubmissions(exam: Exam) {
     setBusy(true); setSelectedExam(exam);
     try { setSubmissions(await request(`/teacher/exams/${exam._id}/submissions`)); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Submissions load failed"); }
+    catch (error) { setMessage(oromoErrorMessage(error, "Deebiiwwan barattootaa fe'uun hin danda'amne.")); }
     finally { setBusy(false); }
   }
 
@@ -269,7 +277,7 @@ export default function TeacherPage() {
       await request(`/teacher/submissions/${submission._id}/grade`, "PATCH", { grades });
       setMessage("Mark galmaa'eera. Bu'aa barataa kana amma maxxansuu dandeessa.");
       await openSubmissions(selectedExam);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Grading failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Qabxii barataa madaaluu ykn olkaa'uu hin dandeenye.")); }
     finally { setBusy(false); }
   }
 
@@ -279,7 +287,7 @@ export default function TeacherPage() {
       await request(`/teacher/submissions/${submission._id}/publish-result`, "POST");
       if (selectedExam) await openSubmissions(selectedExam);
       setMessage("Bu'aan barataa kanaaf publish ta'eera.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Result publish failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Bu'aa barataa maxxansuu hin dandeenye.")); }
     finally { setBusy(false); }
   }
 
