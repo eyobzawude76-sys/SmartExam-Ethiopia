@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { oromoErrorMessage } from "../oromo-errors";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -47,13 +48,20 @@ export default function AdminPage() {
   const [studentSection, setStudentSection] = useState("");
 
   async function request(path: string, method = "GET", body?: unknown) {
-    const response = await fetch(API + path, {
-      method,
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    let response: Response;
+    try {
+      response = await fetch(API + path, {
+        method,
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (error) {
+      throw new Error(oromoErrorMessage(error, "Serverii waliin wal qunnamuu hin dandeenye. Intarneetii kee mirkaneeffadhu."));
+    }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail ?? "Request failed");
+    if (!response.ok) {
+      throw new Error(oromoErrorMessage(`${response.status} ${data.detail ?? data.error ?? ""}`, "Gaaffii kee raawwachuun hin danda'amne. Odeeffannoo galchite mirkaneeffadhu."));
+    }
     return data;
   }
 
@@ -81,7 +89,7 @@ export default function AdminPage() {
   useEffect(() => {
     // Authentication changes trigger the protected dashboard refresh; clear invalid sessions on failure.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (token && !mustChangePassword) refresh().catch((error) => { setMessage(error.message); setToken(""); window.sessionStorage.removeItem("smartExamAdminToken"); window.sessionStorage.removeItem("smartExamAdminMustChangePassword"); });
+    if (token && !mustChangePassword) refresh().catch((error) => { setMessage(oromoErrorMessage(error, "Daataa Admin fe'uun hin danda'amne.")); setToken(""); window.sessionStorage.removeItem("smartExamAdminToken"); window.sessionStorage.removeItem("smartExamAdminMustChangePassword"); });
     // Refresh only when authentication changes or the required password change is completed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, mustChangePassword]);
@@ -96,7 +104,7 @@ export default function AdminPage() {
       setMustChangePassword(Boolean(data.user.must_change_password));
       setToken(data.access_token); setPassword("");
       setMessage(data.user.must_change_password ? "Jalqaba password jijjiiri." : "Admin seente.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Login failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Seenuun hin milkoofne. Username fi password kee mirkaneeffadhu.")); }
     finally { setBusy(false); }
   }
 
@@ -113,11 +121,11 @@ export default function AdminPage() {
       try {
         await refresh();
       } catch (refreshError) {
-        const detail = refreshError instanceof Error ? refreshError.message : "Unknown refresh error";
-        setMessage(`${successMessage} Dashboard refresh failed: ${detail}. The account creation request succeeded.`);
+        const detail = oromoErrorMessage(refreshError, "Daataa haaromsuu hin dandeenye.");
+        setMessage(`${successMessage} Garuu daataa dashboard haaromsuun hin milkoofne: ${detail}. Herrega uumuu milkaa'eera.`);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Request failed");
+      setMessage(oromoErrorMessage(error, "Gaaffii kee raawwachuun hin milkoofne. Odeeffannoo galchite mirkaneeffadhu."));
     }
     finally { setBusy(false); }
   }
@@ -131,11 +139,11 @@ export default function AdminPage() {
       try {
         await refresh();
       } catch (refreshError) {
-        const detail = refreshError instanceof Error ? refreshError.message : "Unknown refresh error";
-        setMessage(`${successMessage} Dashboard refresh failed: ${detail}. The status update succeeded.`);
+        const detail = oromoErrorMessage(refreshError, "Daataa haaromsuu hin dandeenye.");
+        setMessage(`${successMessage} Garuu daataa dashboard haaromsuun hin milkoofne: ${detail}. Jijjiiramni haala herregaa milkaa'eera.`);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Status update failed");
+      setMessage(oromoErrorMessage(error, "Haala herrega jijjiiruu hin dandeenye."));
     } finally {
       setBusy(false);
     }
@@ -144,7 +152,7 @@ export default function AdminPage() {
   async function changePassword(event: FormEvent) {
     event.preventDefault();
     if (newPassword !== confirmPassword) {
-      setMessage("New password fi confirmation wal hin siman.");
+      setMessage("Password haaraan fi mirkaneessi isaa wal hin siman.");
       return;
     }
     setBusy(true);
@@ -160,7 +168,7 @@ export default function AdminPage() {
       setConfirmPassword("");
       setMessage("Password jijjiirameera. Admin dashboard banamaa jira.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Password change failed");
+      setMessage(oromoErrorMessage(error, "Password jijjiiruu hin dandeenye. Password durii fi haaraa mirkaneeffadhu."));
     } finally {
       setBusy(false);
     }
