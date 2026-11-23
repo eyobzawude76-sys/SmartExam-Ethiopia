@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { oromoErrorMessage } from "../oromo-errors";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -27,13 +28,20 @@ export default function StudentPage() {
   const answerSaveQueue = useRef<Promise<void>>(Promise.resolve());
 
   async function request(path: string, method = "GET", body?: unknown) {
-    const response = await fetch(API + path, {
-      method,
-      headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    let response: Response;
+    try {
+      response = await fetch(API + path, {
+        method,
+        headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (error) {
+      throw new Error(oromoErrorMessage(error, "Serverii waliin wal qunnamuu hin dandeenye. Intarneetii kee mirkaneeffadhu."));
+    }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail ?? "Request failed");
+    if (!response.ok) {
+      throw new Error(oromoErrorMessage(`${response.status} ${data.detail ?? data.error ?? ""}`, "Gaaffii kee raawwachuun hin danda'amne. Odeeffannoo galchite mirkaneeffadhu."));
+    }
     return data;
   }
 
@@ -55,7 +63,7 @@ export default function StudentPage() {
       setActiveExam(null); setAnswers({});
       setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee submit ta'aniiru." : "Qormaata xumurteetta.");
       await refresh();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Submit failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Qormaata erguu hin dandeenye. Intarneetii kee mirkaneeffadhuutii irra deebi'ii yaali.")); }
     finally { setBusy(false); }
   }
 
@@ -74,7 +82,7 @@ export default function StudentPage() {
     // Authenticated state starts the Student dashboard data load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (token && !mustChange) refresh().catch(error => {
-      setMessage(error instanceof Error ? error.message : "Session expired");
+      setMessage(oromoErrorMessage(error, "Yeroon seensaa kee xumurameera. Irra deebi'ii seeni."));
       setToken("");
       window.sessionStorage.removeItem("smartExamStudentToken");
       window.sessionStorage.removeItem("smartExamStudentMustChangePassword");
@@ -95,7 +103,7 @@ export default function StudentPage() {
     if (!activeExam || secondsLeft !== 0) return;
     // Defer submission to the timer callback rather than setting state in the effect body.
     const timeout = window.setTimeout(() => {
-      submitExam(true).catch(error => setMessage(error instanceof Error ? error.message : "Auto-submit failed"));
+      submitExam(true).catch(error => setMessage(oromoErrorMessage(error, "Qormaata yeroo isaa xumuruun ofumaan erguu hin dandeenye. Maaloo barsiisaa qunnami.")));
     }, 0);
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,13 +124,13 @@ export default function StudentPage() {
         body: JSON.stringify({ username, password }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail ?? "Login failed");
+      if (!response.ok) throw new Error(oromoErrorMessage(`${response.status} ${data.detail ?? data.error ?? ""}`, "Seenuun hin milkoofne. Username fi password kee mirkaneeffadhu."));
       if (data.user.role !== "STUDENT") throw new Error("Kun Student account miti.");
       window.sessionStorage.setItem("smartExamStudentToken", data.access_token);
       window.sessionStorage.setItem("smartExamStudentMustChangePassword", String(Boolean(data.user.must_change_password)));
       setMustChange(Boolean(data.user.must_change_password)); setToken(data.access_token); setPassword("");
       setMessage("Student seenteera.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Login failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Seenuun hin milkoofne. Username fi password kee mirkaneeffadhu.")); }
     finally { setBusy(false); }
   }
 
@@ -137,7 +145,7 @@ export default function StudentPage() {
       window.sessionStorage.setItem("smartExamStudentMustChangePassword", "false");
       setMustChange(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
       setMessage("Password jijjiirameera.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Password change failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Password jijjiiruu hin dandeenye. Password durii fi haaraa mirkaneeffadhu.")); }
     finally { setBusy(false); }
   }
 
@@ -150,7 +158,7 @@ export default function StudentPage() {
       setAnswers(initial);
       setSecondsLeft(-1);
       setActiveExam({ id: exam.id, title: exam.title, submissionId: data.submission_id, deadline: data.deadline_at, questions: data.questions });
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Exam start failed"); await refresh(); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Qormaata jalqabuu hin dandeenye. Yeroo qormaataa fi ramaddii kee mirkaneeffadhu.")); await refresh(); }
     finally { setBusy(false); }
   }
 
@@ -166,7 +174,7 @@ export default function StudentPage() {
     });
     try {
       await answerSaveQueue.current;
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Answer save failed"); }
+    } catch (error) { setMessage(oromoErrorMessage(error, "Deebii kee olkaa'uu hin dandeenye. Intarneetii kee mirkaneeffadhuutii irra deebi'ii yaali.")); }
   }
 
   const timeText = `${Math.floor(secondsLeft / 60).toString().padStart(2, "0")}:${(secondsLeft % 60).toString().padStart(2, "0")}`;
