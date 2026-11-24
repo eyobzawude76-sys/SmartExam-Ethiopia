@@ -354,6 +354,15 @@ async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_d
     requested_ids = set(payload.exam_ids)
     for exam in exams:
         distribution_id = exam.get("distribution_id")
+        if not distribution_id:
+            active_count = await db.teacher_assignments.count_documents({
+                "teacher_id": teacher["_id"], "is_active": True,
+            })
+            if active_count != 1:
+                raise HTTPException(
+                    status_code=403,
+                    detail="A single-scope exam cannot be published while multiple Admin assignments are active",
+                )
         if distribution_id:
             group_docs = await db.exams.find(
                 {"distribution_id": distribution_id, "teacher_id": teacher["_id"]},
