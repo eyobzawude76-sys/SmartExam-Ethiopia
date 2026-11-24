@@ -170,6 +170,20 @@ async def upload_questions_csv(file: UploadFile = File(...), subject_id: str = "
 @router.post("/exams", status_code=201)
 async def create_exam(payload: TeacherExamInput, db=Depends(get_db),
                       teacher=Depends(teacher_account)):
+    active_assignments = await db.teacher_assignments.find(
+        {"teacher_id": teacher["_id"], "is_active": True},
+        {"subject_id": 1, "class_id": 1, "section_id": 1, "_id": 0},
+    ).to_list(100)
+    if len(active_assignments) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Create exams for all your active assignments through the all-assignments workflow",
+        )
+    only_assignment = active_assignments[0]
+    if (payload.subject_id, payload.class_id, payload.section_id) != (
+        only_assignment["subject_id"], only_assignment["class_id"], only_assignment["section_id"]
+    ):
+        raise HTTPException(status_code=403, detail="Exam scope must match your Admin-assigned assignment")
     await require_assignment(db, teacher["_id"], payload.subject_id, payload.class_id, payload.section_id)
     questions = await db.questions.find({
         "_id": {"$in": payload.question_ids}, "teacher_id": teacher["_id"],
@@ -199,6 +213,23 @@ async def create_exam(payload: TeacherExamInput, db=Depends(get_db),
 @router.post("/exams/distribute", status_code=201)
 async def distribute_exam(payload: TeacherDistributeExamInput, db=Depends(get_db),
                           teacher=Depends(teacher_account)):
+    active_assignments = await db.teacher_assignments.find(
+        {"teacher_id": teacher["_id"], "is_active": True},
+        {"subject_id": 1, "class_id": 1, "section_id": 1, "_id": 0},
+    ).to_list(100)
+    expected_targets = {
+        (item["subject_id"], item["class_id"], item["section_id"])
+        for item in active_assignments
+    }
+    requested_targets = {
+        (item.subject_id, item.class_id, item.section_id)
+        for item in payload.target_assignments
+    }
+    if not expected_targets or requested_targets != expected_targets or len(payload.target_assignments) != len(expected_targets):
+        raise HTTPException(
+            status_code=403,
+            detail="An exam must be distributed to every active Admin-assigned class, section and subject",
+        )
     source = payload.source_assignment
     await require_assignment(db, teacher["_id"], source.subject_id, source.class_id, source.section_id)
     questions = await db.questions.find({
@@ -209,6 +240,7 @@ async def distribute_exam(payload: TeacherDistributeExamInput, db=Depends(get_db
     if len(questions) != len(payload.question_ids):
         raise HTTPException(status_code=422, detail="Every selected question must belong to the source assignment")
     created = []
+    distribution_id = str(uuid4())
     for target in payload.target_assignments:
         await require_assignment(db, teacher["_id"], target.subject_id, target.class_id, target.section_id)
         exam_id = str(uuid4())
@@ -217,7 +249,8 @@ async def distribute_exam(payload: TeacherDistributeExamInput, db=Depends(get_db
             "options": q["options"], "points": q["points"],
         } for q in questions]
         exam = {
-            "_id": exam_id, "teacher_id": teacher["_id"], "title": payload.title,
+            "_id": exam_id, "teacher_id": teacher["_id"], "distribution_id": distribution_id,
+            "title": payload.title,
             "subject_id": target.subject_id, "class_id": target.class_id,
             "section_id": target.section_id, "question_ids": [q["question_id"] for q in snapshot],
             "questions_snapshot": snapshot,
@@ -259,18 +292,41 @@ async def publish_exam(exam_id: str, db=Depends(get_db), teacher=Depends(teacher
     exam = await db.exams.find_one({"_id": exam_id, "teacher_id": teacher["_id"]})
     if exam is None:
         raise HTTPException(status_code=404, detail="Exam not found")
-    if exam["status"] == "published":
-        raise HTTPException(status_code=409, detail="Exam is already published")
-    await require_exam_assignment(db, teacher["_id"], exam)
-    if not exam.get("questions_snapshot"):
-        raise HTTPException(status_code=422, detail="An exam must contain questions before publishing")
-    update = await db.exams.update_one(
-        {"_id": exam_id, "teacher_id": teacher["_id"], "status": "draft"},
-        {"$set": {"status": "published", "published_at": now()}},
+    if exam.get("status") != "draft":
+        raise HTTPException(status_code=409, detail="Exam is not a draft")
+    if exam.get("distribution_id"):
+        group = await db.exams.find({
+            "distribution_id": exam["distribution_id"], "teacher_id": teacher["_id"],
+        }).to_list(100)
+    else:
+        active_count = await db.teacher_assignments.count_documents({
+            "teacher_id": teacher["_id"], "is_active": True,
+        })
+        if active_count != 1:
+            raise HTTPException(status_code=403, detail="This exam is not distributed to all your active assignments")
+        group = [exam]
+    if not group or any(item.get("status") != "draft" for item in group):
+        raise HTTPException(status_code=409, detail="Every assignment copy must still be a draft")
+    for item in group:
+        await require_exam_assignment(db, teacher["_id"], item)
+        if not item.get("questions_snapshot"):
+            raise HTTPException(status_code=422, detail="Every assignment copy must contain questions")
+    ids = [item["_id"] for item in group]
+    published_at = now()
+    update = await db.exams.update_many(
+        {"_id": {"$in": ids}, "teacher_id": teacher["_id"], "status": "draft"},
+        {"$set": {"status": "published", "published_at": published_at}},
     )
-    if update.matched_count != 1:
-        raise HTTPException(status_code=409, detail="Exam state changed; refresh and try again")
-    return {"id": exam_id, "status": "published"}
+    if update.modified_count != len(ids):
+        rollback = await db.exams.update_many(
+            {"_id": {"$in": ids}, "teacher_id": teacher["_id"],
+             "status": "published", "published_at": published_at},
+            {"$set": {"status": "draft", "published_at": None}},
+        )
+        if rollback.modified_count != update.modified_count:
+            raise HTTPException(status_code=500, detail="Publish was partial and recovery was incomplete")
+        raise HTTPException(status_code=409, detail="Not all assignment copies could be published")
+    return {"id": exam_id, "published_count": update.modified_count, "status": "published"}
 
 
 @router.post("/exams/publish-batch")
@@ -281,6 +337,21 @@ async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_d
     }).to_list(100)
     if len(exams) != len(payload.exam_ids):
         raise HTTPException(status_code=404, detail="One or more exams were not found")
+    requested_ids = set(payload.exam_ids)
+    for exam in exams:
+        distribution_id = exam.get("distribution_id")
+        if distribution_id:
+            group_ids = {
+                item["_id"] for item in await db.exams.find(
+                    {"distribution_id": distribution_id, "teacher_id": teacher["_id"]},
+                    {"_id": 1},
+                ).to_list(100)
+            }
+            if not group_ids.issubset(requested_ids):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Publish must include every assignment copy of a distributed exam",
+                )
     if any(exam.get("status") != "draft" for exam in exams):
         raise HTTPException(status_code=409, detail="Every selected exam must still be a draft")
     if any(not exam.get("questions_snapshot") for exam in exams):
