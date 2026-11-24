@@ -134,7 +134,7 @@ def test_teacher_can_work_with_multiple_assigned_class_section_subject_combinati
         "class_id": ctx["class_id"], "section_id": second_section,
         "question_ids": [question.json()["_id"]], "duration_minutes": 20,
     })
-    assert exam.status_code == 201, exam.text
+    assert exam.status_code == 409, exam.text
 
     wrong_scope = ctx["client"].post("/api/v1/teacher/exams", json={
         "title": "Unassigned combination", "subject_id": second_subject,
