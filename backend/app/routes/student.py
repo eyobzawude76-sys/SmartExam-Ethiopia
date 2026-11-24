@@ -71,11 +71,13 @@ async def visible_exams(db, student_id: str, enrollment: dict):
         if not exam_is_available(exam, current) or not await exam_teacher_is_active(db, exam):
             continue
         if not exam.get("allow_retakes", False):
-            submitted_attempts = await db.submissions.count_documents({
+            # Any attempt that is no longer in progress is a completed attempt.
+            # This also handles older records that used a legacy terminal status.
+            completed_attempt = await db.submissions.find_one({
                 "exam_id": exam["_id"], "student_id": student_id,
-                "status": {"$in": ["submitted", "graded"]},
-            })
-            if submitted_attempts:
+                "status": {"$ne": "in_progress"},
+            }, {"_id": 1})
+            if completed_attempt:
                 continue
         visible.append(safe_exam(exam))
     return visible
@@ -165,11 +167,11 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
                 "submission_id": existing["_id"], "deadline_at": as_utc(existing["deadline_at"]),
                 "questions": student_questions(exam), "answers": existing.get("answers", []),
             }
-    attempts = await db.submissions.count_documents({
+    completed_attempt = await db.submissions.find_one({
         "exam_id": exam_id, "student_id": student["_id"],
-        "status": {"$in": ["submitted", "graded"]},
-    })
-    if attempts and not exam.get("allow_retakes", False):
+        "status": {"$ne": "in_progress"},
+    }, {"_id": 1})
+    if completed_attempt and not exam.get("allow_retakes", False):
         raise HTTPException(status_code=409, detail="You have already submitted this exam")
     submission_id = str(uuid4())
     deadline = current + timedelta(minutes=exam["duration_minutes"])
