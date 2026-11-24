@@ -25,8 +25,6 @@ export default function TeacherPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState("");
-  const [selectedExamAssignment, setSelectedExamAssignment] = useState("");
-  const [selectedQuestionSource, setSelectedQuestionSource] = useState("");
   const [distributedExamIds, setDistributedExamIds] = useState<string[]>([]);
   const [questionText, setQuestionText] = useState("");
   const [options, setOptions] = useState(["", "", "", ""]);
@@ -71,8 +69,6 @@ export default function TeacherPage() {
       const first = dashboard.assignments[0];
       const firstKey = [first.subject_id, first.class_id, first.section_id].join("|");
       setSelectedAssignment(current => current || firstKey);
-      setSelectedExamAssignment(current => current || firstKey);
-      setSelectedQuestionSource(current => current || firstKey);
     }
   }
 
@@ -140,10 +136,8 @@ export default function TeacherPage() {
     finally { setBusy(false); }
   }
 
-  const assignmentParts = selectedExamAssignment.split("|");
-  const examTargets = selectedExamAssignment === "__ALL__"
-    ? assignments
-    : assignments.filter(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedExamAssignment);
+  const examTargets = assignments;
+  const examSource = assignments[0];
   const questionTargets = selectedAssignment === "__ALL__"
     ? assignments
     : assignments.filter(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedAssignment);
@@ -201,37 +195,31 @@ export default function TeacherPage() {
   }
 
   async function createExam(event: FormEvent) {
-    event.preventDefault(); if (!examTargets.length) return;
+    event.preventDefault(); if (!examTargets.length || !examSource) return;
     setBusy(true); setMessage("");
     const createdIds: string[] = [];
     try {
-      if (selectedExamAssignment === "__ALL__") {
-        const source = assignments.find(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedQuestionSource);
-        if (!source) throw new Error("Question source assignment filadhu.");
-        const result = await request("/teacher/exams/distribute", "POST", {
-          title: examTitle,
-          source_assignment: { subject_id: source.subject_id, class_id: source.class_id, section_id: source.section_id },
-          target_assignments: examTargets.map(a => ({ subject_id: a.subject_id, class_id: a.class_id, section_id: a.section_id })),
-          question_ids: examQuestions, duration_minutes: Number(duration), allow_retakes: allowRetakes,
-        });
-        createdIds.push(...result.created_exam_ids);
-      } else {
-        const target = examTargets[0];
-        const created = await request("/teacher/exams", "POST", {
-          title: examTitle, subject_id: target.subject_id, class_id: target.class_id,
-          section_id: target.section_id, question_ids: examQuestions,
-          duration_minutes: Number(duration), allow_retakes: allowRetakes,
-        });
-        createdIds.push(created._id);
-      }
+      const result = await request("/teacher/exams/distribute", "POST", {
+        title: examTitle,
+        source_assignment: {
+          subject_id: examSource.subject_id,
+          class_id: examSource.class_id,
+          section_id: examSource.section_id,
+        },
+        target_assignments: examTargets.map(a => ({
+          subject_id: a.subject_id, class_id: a.class_id, section_id: a.section_id,
+        })),
+        question_ids: examQuestions, duration_minutes: Number(duration), allow_retakes: allowRetakes,
+      });
+      createdIds.push(...result.created_exam_ids);
       setDistributedExamIds(createdIds);
       setExamTitle(""); setExamQuestions([]); await refresh();
-      setMessage(`Exam draft ${createdIds.length} assignment irratti uumameera. Amma hundaa waliin publish gochuu dandeessa.`);
+      setMessage(`Exam draft assignment Admin siif kenne hundaaf uumameera (${createdIds.length}). Publish yeroo gootu hundi isaanii waliin maxxanfamu.`);
     } catch (error) {
       setDistributedExamIds(createdIds);
       if (createdIds.length) await refresh().catch(() => undefined);
       const detail = oromoErrorMessage(error, "Qormaata uumuu hin dandeenye. Odeeffannoo fi gaaffilee filataman mirkaneeffadhu.");
-      setMessage(createdIds.length ? `${detail}. Exam draft ${createdIds.length} assignment irratti uumameera; hafan hin milkoofne.` : detail);
+      setMessage(createdIds.length ? `${detail}. Exam draft ${createdIds.length} irratti uumameera; hafan hin milkoofne.` : detail);
     }
     finally { setBusy(false); }
   }
@@ -250,7 +238,12 @@ export default function TeacherPage() {
 
   async function publishExam(exam: Exam) {
     setBusy(true);
-    try { await request(`/teacher/exams/${exam._id}/publish`, "POST"); await refresh(); setMessage("Exam publish ta'eera."); }
+    try {
+      const result = await request(`/teacher/exams/${exam._id}/publish`, "POST");
+      setDistributedExamIds([]);
+      await refresh();
+      setMessage(`Exam assignment Admin siif kenne hundaaf publish ta'eera (${result.published_count ?? 1}).`);
+    }
     catch (error) { setMessage(oromoErrorMessage(error, "Qormaata maxxansuu hin dandeenye.")); }
     finally { setBusy(false); }
   }
@@ -326,12 +319,8 @@ export default function TeacherPage() {
           {assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}
         </select>
         <p className="muted">{selectedAssignment === "__ALL__" ? `Gaaffiin assignment ${assignments.length} hundaaf galmaa'a.` : "Gaaffiin assignment filatame qofaaf galmaa'a."}</p>
-        <h2>Exam Destination — One Assignment</h2>
-        <select value={selectedExamAssignment} onChange={e=>{setSelectedExamAssignment(e.target.value);setExamQuestions([]);setSelectedExam(null);setSubmissions([]);}}>
-          <option value="__ALL__">All My Assignments</option>
-          {assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}
-        </select>
-        <p className="muted">{selectedExamAssignment === "__ALL__" ? "Qormaata kana assignment hundaaf clone gochuun uuma." : "Qormaata kana assignment filatame qofaaf uuma."}</p>
+        <h2>Exam Destination — All Admin Assignments</h2>
+        <p className="muted">Qormaanni Class, Section fi Subject Admin irraa siif ramadaman hundaaf ofumaan qophaa'a. Ati bakka itti ergamu filachuu hin dandeessu.</p>
         {!assignments.length && <p className="muted">Admin assignment hin kennamne. Admin qunnamii.</p>}
       </section>
       <section className="admin-grid">
@@ -350,16 +339,14 @@ export default function TeacherPage() {
             <label>Exam title<input value={examTitle} onChange={e=>setExamTitle(e.target.value)} minLength={3} required /></label>
             <label>Duration (minutes)<input type="number" min="1" max="300" value={duration} onChange={e=>setDuration(e.target.value)} required /></label>
             <label className="inline-check"><input type="checkbox" checked={allowRetakes} onChange={e=>setAllowRetakes(e.target.checked)} /> Allow retakes</label>
-            {selectedExamAssignment === "__ALL__" && <label>Question Source Assignment<select value={selectedQuestionSource} onChange={e=>{setSelectedQuestionSource(e.target.value);setExamQuestions([]);}}>{assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}</select></label>}
-            <p className="muted">Gaaffilee assignment source filatame keessaa filadhu. Sirni isaanii qormaata Assignment hundaaf adda addaan uuma.</p>
-            {questions.filter(q=>q.subject_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[0]:assignmentParts[0]) && q.class_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[1]:assignmentParts[1]) && q.section_id===(selectedExamAssignment==="__ALL__"?selectedQuestionSource.split("|")[2]:assignmentParts[2])).map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
-            <button disabled={busy || !examTargets.length || !examQuestions.length}>Create exam draft</button>
-            {selectedExamAssignment === "__ALL__" && <p className="muted">Hubadhu: gaaffileen source assignment irraa filataman assignment hundaaf copy ta&apos;u.</p>}
+            <p className="muted">{examSource ? `Gaaffileen ${examSource.subject_name} — ${examSource.class_name} / ${examSource.section_name} keessaa fudhatamu; qormaanni assignment Admin siif kenne hundaaf adda addaan qophaa'a.` : "Admin assignment siif hin kennine."}</p>
+            {examSource && questions.filter(q=>q.subject_id===examSource.subject_id && q.class_id===examSource.class_id && q.section_id===examSource.section_id).map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
+            <button disabled={busy || !examTargets.length || !examQuestions.length}>Create exam for all assignments</button>
           </form>
         </article>
       </section>
       <section className="admin-panel"><h2>My Questions ({questions.length})</h2><ul>{questions.map(q=><li key={q._id}>{q.question_text} <small>({q.points} pt)</small></li>)}</ul></section>
-      <section className="admin-panel"><h2>My Exams</h2>{distributedExamIds.length > 0 && <button disabled={busy} onClick={publishDistributedExams}>Publish all distributed exams ({distributedExamIds.length})</button>}<ul>{exams.map(exam=><li key={exam._id} className="teacher-list-item"><span><strong>{exam.title}</strong><small>{exam.status} · {exam.duration_minutes} min · {exam.question_ids.length} questions</small></span><span className="teacher-actions">{exam.status==="draft" && <button disabled={busy} onClick={()=>publishExam(exam)}>Publish exam</button>}<button className="secondary" disabled={busy} onClick={()=>openSubmissions(exam)}>Submissions</button></span></li>)}</ul></section>
+      <section className="admin-panel"><h2>My Exams</h2>{distributedExamIds.length > 0 && <button disabled={busy} onClick={publishDistributedExams}>Publish all distributed exams ({distributedExamIds.length})</button>}<ul>{exams.map(exam=><li key={exam._id} className="teacher-list-item"><span><strong>{exam.title}</strong><small>{exam.status} · {exam.duration_minutes} min · {exam.question_ids.length} questions</small></span><span className="teacher-actions">{exam.status==="draft" && <button disabled={busy} onClick={()=>publishExam(exam)}>Publish to all assignments</button>}<button className="secondary" disabled={busy} onClick={()=>openSubmissions(exam)}>Submissions</button></span></li>)}</ul></section>
       {selectedExam && <section className="admin-panel"><h2>Submissions — {selectedExam.title}</h2>
         {!submissions.length && <p className="muted">Ammaaf submissions hin jiru.</p>}
         {submissions.map(sub=><article className="submission-card" key={sub._id}>
