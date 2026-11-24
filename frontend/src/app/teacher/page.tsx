@@ -137,7 +137,9 @@ export default function TeacherPage() {
   }
 
   const examTargets = assignments;
-  const examSource = assignments[0];
+  const examSource = assignments.find(a => questions.some(q =>
+    q.subject_id === a.subject_id && q.class_id === a.class_id && q.section_id === a.section_id
+  )) ?? assignments[0];
   const questionTargets = selectedAssignment === "__ALL__"
     ? assignments
     : assignments.filter(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedAssignment);
