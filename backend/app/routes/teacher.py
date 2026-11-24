@@ -437,12 +437,20 @@ async def list_exam_submissions(exam_id: str, db=Depends(get_db), teacher=Depend
         {"answers": 1, "student_id": 1, "status": 1, "score": 1, "total_points": 1,
          "submitted_at": 1, "result_published": 1, "graded_at": 1},
     ).sort("submitted_at", 1).to_list(5000)
+    school_class = await db.classes.find_one({"_id": exam["class_id"]}, {"name": 1})
+    section = await db.sections.find_one({"_id": exam["section_id"]}, {"name": 1})
+    class_name = school_class.get("name", "Unavailable") if school_class else "Unavailable"
+    section_name = section.get("name", "Unavailable") if section else "Unavailable"
     for submission in submissions:
         student = await db.users.find_one(
             {"_id": submission["student_id"], "role": "STUDENT"},
             {"full_name": 1, "username": 1},
         )
-        submission["student"] = student or {"full_name": "Unavailable", "username": ""}
+        submission["student"] = {
+            **(student or {"full_name": "Unavailable", "username": ""}),
+            "class_name": class_name,
+            "section_name": section_name,
+        }
     return submissions
 
 
