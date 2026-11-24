@@ -463,3 +463,52 @@ def test_student_cannot_read_or_mutate_another_students_submission(student_conte
     other_record = ctx["db"].submissions.find_one({"_id": other_submission_id})
     assert other_record["status"] == "in_progress"
     assert other_record["answers"] == []
+
+def test_student_can_review_only_own_published_result_answers(student_context):
+    ctx = student_context
+    submission_id = str(uuid.uuid4())
+    ctx["db"].exams.update_one(
+        {"_id": ctx["exam_id"]},
+        {"$set": {"questions_snapshot.0.correct_option": 2}},
+    )
+    ctx["db"].submissions.insert_one({
+        "_id": submission_id, "exam_id": ctx["exam_id"],
+        "teacher_id": ctx["teacher_id"], "student_id": ctx["student_id"],
+        "status": "graded", "answers": [
+            {"question_id": ctx["question_id"], "selected_option": 1},
+        ],
+        "grades": [
+            {"question_id": ctx["question_id"], "is_correct": False, "points_awarded": 0},
+        ],
+        "score": 0, "total_points": 5, "result_published": False,
+    })
+
+    hidden = ctx["client"].get(f"/api/v1/student/results/{submission_id}/details")
+    assert hidden.status_code == 404
+
+    ctx["db"].submissions.update_one(
+        {"_id": submission_id}, {"$set": {"result_published": True}},
+    )
+    visible = ctx["client"].get(f"/api/v1/student/results/{submission_id}/details")
+    assert visible.status_code == 200, visible.text
+    detail = visible.json()
+    assert detail["questions"][0]["selected_option"] == 1
+    assert detail["questions"][0]["correct_option"] == 2
+    assert detail["questions"][0]["is_correct"] is False
+
+    other_student = str(uuid.uuid4())
+    ctx["db"].users.insert_one({
+        "_id": other_student, "username": f"other_{uuid.uuid4().hex[:8]}",
+        "full_name": "Other Student", "password_hash": hash_password("Other-Student-Password-123!"),
+        "role": "STUDENT", "is_active": True, "must_change_password": False,
+    })
+    other_login = ctx["client"].post("/api/v1/auth/login", json={
+        "username": ctx["db"].users.find_one({"_id": other_student})["username"],
+        "password": "Other-Student-Password-123!",
+    })
+    other_client = TestClient(app)
+    other_client.headers.update({"Authorization": f"Bearer {other_login.json()['access_token']}"})
+    denied = other_client.get(f"/api/v1/student/results/{submission_id}/details")
+    assert denied.status_code == 404
+    other_client.close()
+
