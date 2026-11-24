@@ -7,7 +7,8 @@ const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v
 
 type Exam = { id: string; title: string; duration_minutes: number; question_count: number; total_points: number; subject_id: string };
 type Question = { question_id: string; question_text: string; options: string[]; points: number };
-type Result = { exam_id: string; exam_title: string; score: number; total_points: number; result_published_at?: string };
+type Result = { submission_id: string; exam_id: string; exam_title: string; score: number; total_points: number; result_published_at?: string };
+type ResultDetail = { submission_id: string; exam_title: string; score: number; total_points: number; questions: Array<{ question_id: string; question_text: string; options: string[]; selected_option: number | null; is_correct: boolean | null; correct_option: number | null; points_awarded: number; points: number }> };
 
 export default function StudentPage() {
   const [token, setToken] = useState("");
@@ -20,6 +21,7 @@ export default function StudentPage() {
   const [studentName, setStudentName] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
   const [results, setResults] = useState<Result[]>([]);
+  const [selectedResult, setSelectedResult] = useState<ResultDetail | null>(null);
   const [activeExam, setActiveExam] = useState<{ id: string; title: string; submissionId: string; deadline: string; questions: Question[] } | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [secondsLeft, setSecondsLeft] = useState(-1);
@@ -61,7 +63,7 @@ export default function StudentPage() {
       await answerSaveQueue.current.catch(() => undefined);
       await request(`/student/submissions/${activeExam.submissionId}/submit`, "POST");
       setActiveExam(null); setAnswers({});
-      setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee submit ta'aniiru." : "Qormaata xumurteetta.");
+      setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee ergameera. Qormaanni kun tarree qormaata jiran keessaa haqameera." : "Qormaata xumurteetta. Qormaanni kun tarree qormaata jiran keessaa haqameera.");
       await refresh();
     } catch (error) { setMessage(oromoErrorMessage(error, "Qormaata erguu hin dandeenye. Intarneetii kee mirkaneeffadhuutii irra deebi'ii yaali.")); }
     finally { setBusy(false); }
@@ -225,11 +227,32 @@ export default function StudentPage() {
             <button disabled={busy} onClick={()=>startExam(exam)}>Start exam</button>
           </li>)}</ul>
         </section>
-        <section className="admin-panel"><h2>Published Results</h2>
-          {!results.length && <p className="muted">Bu&apos;aan ammaaf hin maxxanfamne.</p>}
-          <ul>{results.map((result,index)=><li key={result.exam_id+index}>
-            <strong>{result.exam_title}</strong> — {result.score} / {result.total_points}
+        <section className="admin-panel"><h2>Bu'aa Maxxanfame</h2>
+          {!results.length && <p className="muted">Bu'aan ammaaf hin maxxanfamne.</p>}
+          <ul>{results.map(result=><li className="teacher-list-item" key={result.submission_id}>
+            <span><strong>{result.exam_title}</strong><small>{result.score} / {result.total_points} qabxii</small></span>
+            <button className="secondary" disabled={busy} onClick={async()=>{
+              setBusy(true); setMessage("");
+              try { setSelectedResult(await request(`/student/results/${result.submission_id}/details`)); }
+              catch(error) { setMessage(oromoErrorMessage(error, "Bal'ina deebii ilaaluun hin danda'amne.")); }
+              finally { setBusy(false); }
+            }}>Deebii bal'inaan ilaali</button>
           </li>)}</ul>
+          {selectedResult && <article className="submission-card">
+            <div className="admin-header"><div><h3>{selectedResult.exam_title}</h3><p className="muted">Bu'aa: {selectedResult.score} / {selectedResult.total_points}</p></div>
+              <button className="secondary" onClick={()=>setSelectedResult(null)}>Cufi</button></div>
+            {selectedResult.questions.map((question,index)=>{
+              const selectedText = question.selected_option === null ? "Deebii hin kennine" : question.options[question.selected_option] ?? "Deebii hin argamne";
+              const correctText = question.correct_option === null ? null : question.options[question.correct_option] ?? null;
+              return <div className="submission-card" key={question.question_id}>
+                <h4>{index+1}. {question.question_text}</h4>
+                <p><strong>Deebii kee:</strong> {selectedText}</p>
+                <p><strong>Haala deebii:</strong> {question.is_correct === true ? "✓ Sirrii" : question.is_correct === false ? "✗ Dogoggora" : "Barsiisaan hin mirkaneessine"}</p>
+                {correctText !== null && <p><strong>Deebii sirrii:</strong> {correctText}</p>}
+                <p className="muted">Qabxii: {question.points_awarded} / {question.points}</p>
+              </div>;
+            })}
+          </article>}
         </section>
       </>}
     </main>
