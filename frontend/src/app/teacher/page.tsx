@@ -21,6 +21,8 @@ export default function TeacherPage() {
   const [teacherName, setTeacherName] = useState("");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionSearch, setQuestionSearch] = useState("");
+  const [questionPage, setQuestionPage] = useState(1);
   const [exams, setExams] = useState<Exam[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
@@ -135,6 +137,15 @@ export default function TeacherPage() {
     q.subject_id === a.subject_id && q.class_id === a.class_id && q.section_id === a.section_id
   )) ?? assignments[0];
   const questionTargets = assignments;
+  const filteredQuestions = questions.filter(q =>
+    q.question_text.toLocaleLowerCase().includes(questionSearch.trim().toLocaleLowerCase())
+  );
+  const questionPageSize = 10;
+  const questionPageCount = Math.max(1, Math.ceil(filteredQuestions.length / questionPageSize));
+  const visibleQuestions = filteredQuestions.slice(
+    (questionPage - 1) * questionPageSize,
+    questionPage * questionPageSize
+  );
 
   async function createQuestion(event: FormEvent) {
     event.preventDefault(); if (!questionTargets.length) return;
@@ -335,7 +346,28 @@ export default function TeacherPage() {
           </form>
         </article>
       </section>
-      <section className="admin-panel"><h2>My Questions ({questions.length})</h2><ul>{questions.map(q=><li key={q._id}>{q.question_text} <small>({q.points} pt)</small></li>)}</ul></section>
+      <section className="admin-panel">
+        <h2>My Questions ({questions.length})</h2>
+        <label className="field-label" htmlFor="teacher-question-search">Search questions</label>
+        <input
+          id="teacher-question-search"
+          type="search"
+          value={questionSearch}
+          placeholder="Gaaffii barbaaddu barreessi..."
+          onChange={e => { setQuestionSearch(e.target.value); setQuestionPage(1); }}
+        />
+        <p className="muted">
+          {filteredQuestions.length === 0
+            ? "Gaaffiin barbaadame hin jiru."
+            : `Gaaffii ${(questionPage - 1) * questionPageSize + 1}–${Math.min(questionPage * questionPageSize, filteredQuestions.length)} keessaa ${filteredQuestions.length}`}
+        </p>
+        <ul>{visibleQuestions.map(q=><li key={q._id}>{q.question_text} <small>({q.points} pt)</small></li>)}</ul>
+        {questionPageCount > 1 && <div className="teacher-actions" aria-label="Question list pagination">
+          <button type="button" className="secondary" disabled={questionPage === 1} onClick={() => setQuestionPage(p => Math.max(1, p - 1))}>Previous</button>
+          <span className="muted">Fuula {questionPage} / {questionPageCount}</span>
+          <button type="button" className="secondary" disabled={questionPage === questionPageCount} onClick={() => setQuestionPage(p => Math.min(questionPageCount, p + 1))}>Next</button>
+        </div>}
+      </section>
       <section className="admin-panel"><h2>My Exams</h2>{distributedExamIds.length > 0 && <button disabled={busy} onClick={publishDistributedExams}>Publish all distributed exams ({distributedExamIds.length})</button>}<ul>{exams.map(exam=><li key={exam._id} className="teacher-list-item"><span><strong>{exam.title}</strong><small>{exam.status} · {exam.duration_minutes} min · {exam.question_ids.length} questions</small></span><span className="teacher-actions">{exam.status==="draft" && <button disabled={busy} onClick={()=>publishExam(exam)}>Publish to all assignments</button>}<button className="secondary" disabled={busy} onClick={()=>openSubmissions(exam)}>Submissions</button></span></li>)}</ul></section>
       {selectedExam && <section className="admin-panel"><h2>Submissions — {selectedExam.title}</h2>
         {!submissions.length && <p className="muted">Ammaaf submissions hin jiru.</p>}
