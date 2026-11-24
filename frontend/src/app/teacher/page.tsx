@@ -8,7 +8,7 @@ const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v
 type Assignment = { subject_id: string; class_id: string; section_id: string; subject_name: string; class_name: string; section_name: string };
 type Question = { _id: string; subject_id: string; class_id: string; section_id: string; question_text: string; options: string[]; points: number };
 type Exam = { _id: string; title: string; subject_id: string; class_id: string; section_id: string; question_ids: string[]; questions_snapshot?: { question_id: string; question_text: string; options: string[]; points: number }[]; duration_minutes: number; allow_retakes: boolean; status: string };
-type Submission = { _id: string; student_id: string; student?: { full_name: string; username: string }; answers: { question_id: string; selected_option?: number }[]; status: string; score?: number; total_points?: number; result_published?: boolean };
+type Submission = { _id: string; student_id: string; student?: { full_name: string; username: string; class_name?: string; section_name?: string }; answers: { question_id: string; selected_option?: number }[]; status: string; score?: number; total_points?: number; result_published?: boolean };
 
 export default function TeacherPage() {
   const [token, setToken] = useState("");
@@ -397,13 +397,21 @@ export default function TeacherPage() {
         {!submissions.length && <p className="muted">Ammaaf submissions hin jiru.</p>}
         {submissions.map(sub=><article className="submission-card" key={sub._id}>
           <h3>{sub.student?.full_name ?? "Student"} (@{sub.student?.username ?? ""})</h3>
+          <div className="submission-student-meta">
+            <span className="submission-class-tag">Class: {sub.student?.class_name ?? "Unavailable"}</span>
+            <span className="submission-section-tag">Section: {sub.student?.section_name ?? "Unavailable"}</span>
+          </div>
           <p className="muted">Status: {sub.status} · {sub.score ?? "—"} / {sub.total_points ?? "—"} · Result {sub.result_published ? "Published" : "Not published"}</p>
           {sub.status==="in_progress" ? <p className="muted">Barataan qormaata isaa hojjechaa jira. Erga submit godhee booda qofa grade gochuu dandeessa.</p> : <>
             {selectedExam.questions_snapshot?.map(q=>{
               const answer = sub.answers?.find(item=>item.question_id===q.question_id);
               const answerLabel = answer && typeof answer.selected_option === "number" ? q.options[answer.selected_option] ?? "Invalid option" : "No answer recorded";
               return <div className="grade-row" key={q.question_id}>
-              <span>{q.question_text}<small>Student answer: {answerLabel} · {q.points} points</small></span>
+              <span className="submission-question">
+                 <strong>{q.question_text}</strong>
+                 <small className="submission-answer-tag">Deebii barataa: {answerLabel}</small>
+                 <small className="muted">{q.points} points</small>
+               </span>
               <select value={grading[sub._id]?.[q.question_id] === undefined ? "" : String(grading[sub._id][q.question_id])} onChange={e=>setGrading(old=>({...old,[sub._id]:{...(old[sub._id]??{}),[q.question_id]:e.target.value==="true"}}))}>
                 <option value="">Choose ✓ / X</option><option value="false">X — Incorrect</option><option value="true">✓ — Correct</option>
               </select>
