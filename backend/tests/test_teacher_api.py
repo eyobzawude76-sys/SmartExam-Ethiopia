@@ -141,7 +141,7 @@ def test_teacher_can_work_with_multiple_assigned_class_section_subject_combinati
         "class_id": ctx["class_id"], "section_id": ctx["section_id"],
         "question_ids": [question.json()["_id"]], "duration_minutes": 20,
     })
-    assert wrong_scope.status_code == 403
+    assert wrong_scope.status_code == 409
 
 
 def test_teacher_csv_upload_creates_questions(teacher_context):
