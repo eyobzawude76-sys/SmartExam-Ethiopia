@@ -420,6 +420,46 @@ def test_teacher_cannot_view_or_publish_exam_after_assignment_is_deactivated(tea
 
 
 
+def test_teacher_cannot_distribute_exam_to_only_one_of_multiple_assignments(teacher_context):
+    ctx = teacher_context
+    second_subject = str(uuid.uuid4())
+    second_section = str(uuid.uuid4())
+    ctx["db"].subjects.insert_one({
+        "_id": second_subject, "name": "Physics", "code": f"PHY{uuid.uuid4().hex[:4]}",
+        "is_active": True,
+    })
+    ctx["db"].sections.insert_one({
+        "_id": second_section, "class_id": ctx["class_id"], "name": "11-B", "is_active": True,
+    })
+    ctx["db"].teacher_assignments.insert_one({
+        "_id": str(uuid.uuid4()), "teacher_id": ctx["teacher_id"],
+        "subject_id": second_subject, "class_id": ctx["class_id"],
+        "section_id": second_section, "is_active": True,
+    })
+    question = ctx["client"].post("/api/v1/teacher/questions", json={
+        "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+        "section_id": ctx["section_id"], "question_text": "What is 2 + 3?",
+        "options": ["4", "5", "6", "7"], "correct_option": 1, "points": 1,
+    })
+    assert question.status_code == 201, question.text
+
+    response = ctx["client"].post("/api/v1/teacher/exams/distribute", json={
+        "title": "Must reach all assignments",
+        "source_assignment": {
+            "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+            "section_id": ctx["section_id"],
+        },
+        "target_assignments": [{
+            "subject_id": ctx["subject_id"], "class_id": ctx["class_id"],
+            "section_id": ctx["section_id"],
+        }],
+        "question_ids": [question.json()["_id"]],
+        "duration_minutes": 20,
+    })
+    assert response.status_code == 403, response.text
+    assert ctx["db"].exams.count_documents({"teacher_id": ctx["teacher_id"]}) == 0
+
+
 def test_teacher_distribution_rejects_unassigned_target_without_creating_partial_exams(teacher_context):
     ctx = teacher_context
     question = ctx["client"].post("/api/v1/teacher/questions", json={
