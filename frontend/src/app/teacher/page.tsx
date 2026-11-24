@@ -24,7 +24,6 @@ export default function TeacherPage() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-  const [selectedAssignment, setSelectedAssignment] = useState("");
   const [distributedExamIds, setDistributedExamIds] = useState<string[]>([]);
   const [questionText, setQuestionText] = useState("");
   const [options, setOptions] = useState(["", "", "", ""]);
@@ -65,11 +64,6 @@ export default function TeacherPage() {
     setAssignments(a);
     setQuestions(q);
     setExams(e);
-    if (dashboard.assignments.length) {
-      const first = dashboard.assignments[0];
-      const firstKey = [first.subject_id, first.class_id, first.section_id].join("|");
-      setSelectedAssignment(current => current || firstKey);
-    }
   }
 
   useEffect(() => {
@@ -140,9 +134,7 @@ export default function TeacherPage() {
   const examSource = assignments.find(a => questions.some(q =>
     q.subject_id === a.subject_id && q.class_id === a.class_id && q.section_id === a.section_id
   )) ?? assignments[0];
-  const questionTargets = selectedAssignment === "__ALL__"
-    ? assignments
-    : assignments.filter(a => [a.subject_id, a.class_id, a.section_id].join("|") === selectedAssignment);
+  const questionTargets = assignments;
 
   async function createQuestion(event: FormEvent) {
     event.preventDefault(); if (!questionTargets.length) return;
@@ -315,12 +307,8 @@ export default function TeacherPage() {
       <header className="admin-header"><div><p className="eyebrow">SMARTEXAM ETHIOPIA / V1</p><h1>Teacher Dashboard</h1><p className="muted">Baga nagaan dhuftan, {teacherName}.</p></div><button className="secondary" onClick={logout}>Logout</button></header>
       {message && <p className="feedback">{message}</p>}
       <section className="admin-panel stack">
-        <h2>Question Destination — Assignment</h2>
-        <select value={selectedAssignment} onChange={e=>setSelectedAssignment(e.target.value)}>
-          <option value="__ALL__">All My Assignments</option>
-          {assignments.map(a=><option key={[a.subject_id,a.class_id,a.section_id].join("|")} value={[a.subject_id,a.class_id,a.section_id].join("|")}>{a.subject_name} — {a.class_name} / {a.section_name}</option>)}
-        </select>
-        <p className="muted">{selectedAssignment === "__ALL__" ? `Gaaffiin assignment ${assignments.length} hundaaf galmaa'a.` : "Gaaffiin assignment filatame qofaaf galmaa'a."}</p>
+        <h2>Question Destination — All Admin Assignments</h2>
+        <p className="muted">Gaaffiin ati uumtu Class, Section fi Subject Admin irraa siif ramadaman hundaaf ofumaan galmaa'a. Ati bakka itti ramadamu hin filattu.</p>
         <h2>Exam Destination — All Admin Assignments</h2>
         <p className="muted">Qormaanni Class, Section fi Subject Admin irraa siif ramadaman hundaaf ofumaan qophaa'a. Ati bakka itti ergamu filachuu hin dandeessu.</p>
         {!assignments.length && <p className="muted">Admin assignment hin kennamne. Admin qunnamii.</p>}
