@@ -300,10 +300,51 @@ async def submit_exam(submission_id: str, db=Depends(get_db), student=Depends(st
 @router.get("/results")
 async def list_published_results(db=Depends(get_db), student=Depends(student_account)):
     results = await db.submissions.find({
-        "student_id": student["_id"], "result_published": True,
-    }, {"_id": 0, "exam_id": 1, "score": 1, "total_points": 1, "result_published_at": 1, "attempt_number": 1}).to_list(500)
+        "student_id": student["_id"], "result_published": True, "status": "graded",
+    }, {"exam_id": 1, "score": 1, "total_points": 1, "result_published_at": 1, "attempt_number": 1}).sort("result_published_at", -1).to_list(500)
     for result in results:
+        result["submission_id"] = result.pop("_id")
         exam = await db.exams.find_one({"_id": result["exam_id"]}, {"title": 1, "subject_id": 1})
         result["exam_title"] = exam.get("title") if exam else "Exam"
         result["subject_id"] = exam.get("subject_id") if exam else None
     return results
+
+
+@router.get("/results/{submission_id}/details")
+async def published_result_details(submission_id: str, db=Depends(get_db),
+                                   student=Depends(student_account)):
+    submission = await db.submissions.find_one({
+        "_id": submission_id, "student_id": student["_id"],
+        "status": "graded", "result_published": True,
+    })
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Published result not found")
+    exam = await db.exams.find_one({"_id": submission["exam_id"]})
+    if exam is None:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    answers = {item["question_id"]: item for item in submission.get("answers", [])}
+    grades = {item["question_id"]: item for item in submission.get("grades", [])}
+    questions = []
+    for question in exam.get("questions_snapshot", []):
+        answer = answers.get(question["question_id"], {})
+        grade = grades.get(question["question_id"], {})
+        selected = answer.get("selected_option")
+        correct_option = question.get("correct_option")
+        questions.append({
+            "question_id": question["question_id"],
+            "question_text": question["question_text"],
+            "options": question["options"],
+            "selected_option": selected,
+            "is_correct": grade.get("is_correct"),
+            "correct_option": correct_option,
+            "points_awarded": grade.get("points_awarded", 0),
+            "points": question["points"],
+        })
+    return {
+        "submission_id": submission_id,
+        "exam_title": exam["title"],
+        "score": submission.get("score", 0),
+        "total_points": submission.get("total_points", exam.get("total_points", 0)),
+        "questions": questions,
+    }
