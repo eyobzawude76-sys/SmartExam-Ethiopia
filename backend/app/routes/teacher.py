@@ -305,7 +305,21 @@ async def publish_exam(exam_id: str, db=Depends(get_db), teacher=Depends(teacher
         if active_count != 1:
             raise HTTPException(status_code=403, detail="This exam is not distributed to all your active assignments")
         group = [exam]
-    if not group or any(item.get("status") != "draft" for item in group):
+    active_assignments = await db.teacher_assignments.find(
+        {"teacher_id": teacher["_id"], "is_active": True},
+        {"subject_id": 1, "class_id": 1, "section_id": 1, "_id": 0},
+    ).to_list(100)
+    active_scopes = {
+        (item["subject_id"], item["class_id"], item["section_id"])
+        for item in active_assignments
+    }
+    group_scopes = {
+        (item["subject_id"], item["class_id"], item["section_id"])
+        for item in group
+    }
+    if not group or group_scopes != active_scopes:
+        raise HTTPException(status_code=403, detail="This exam must include every current Admin-assigned scope")
+    if any(item.get("status") != "draft" for item in group):
         raise HTTPException(status_code=409, detail="Every assignment copy must still be a draft")
     for item in group:
         await require_exam_assignment(db, teacher["_id"], item)
@@ -341,12 +355,24 @@ async def publish_exam_batch(payload: TeacherPublishExamsInput, db=Depends(get_d
     for exam in exams:
         distribution_id = exam.get("distribution_id")
         if distribution_id:
-            group_ids = {
-                item["_id"] for item in await db.exams.find(
-                    {"distribution_id": distribution_id, "teacher_id": teacher["_id"]},
-                    {"_id": 1},
-                ).to_list(100)
+            group_docs = await db.exams.find(
+                {"distribution_id": distribution_id, "teacher_id": teacher["_id"]},
+            ).to_list(100)
+            group_ids = {item["_id"] for item in group_docs}
+            active_assignments = await db.teacher_assignments.find(
+                {"teacher_id": teacher["_id"], "is_active": True},
+                {"subject_id": 1, "class_id": 1, "section_id": 1, "_id": 0},
+            ).to_list(100)
+            active_scopes = {
+                (item["subject_id"], item["class_id"], item["section_id"])
+                for item in active_assignments
             }
+            group_scopes = {
+                (item["subject_id"], item["class_id"], item["section_id"])
+                for item in group_docs
+            }
+            if group_scopes != active_scopes:
+                raise HTTPException(status_code=403, detail="Distributed exam does not cover every current Admin assignment")
             if not group_ids.issubset(requested_ids):
                 raise HTTPException(
                     status_code=422,
