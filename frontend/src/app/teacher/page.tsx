@@ -144,6 +144,17 @@ export default function TeacherPage() {
   const filteredExams = exams.filter(exam =>
     exam.title.toLocaleLowerCase().includes(examSearch.trim().toLocaleLowerCase())
   );
+  // A question used in any existing exam (draft or published) must not
+  // appear again in the Create Exam picker. Keep it in My Questions.
+  const usedQuestionIds = new Set(exams.flatMap(exam => exam.question_ids ?? []));
+  const availableExamQuestions = examSource
+    ? questions.filter(q =>
+        q.subject_id === examSource.subject_id &&
+        q.class_id === examSource.class_id &&
+        q.section_id === examSource.section_id &&
+        !usedQuestionIds.has(q._id)
+      )
+    : [];
 
   async function createQuestion(event: FormEvent) {
     event.preventDefault(); if (!questionTargets.length) return;
@@ -339,7 +350,9 @@ export default function TeacherPage() {
             <label>Duration (minutes)<input type="number" min="1" max="300" value={duration} onChange={e=>setDuration(e.target.value)} required /></label>
             <label className="inline-check"><input type="checkbox" checked={allowRetakes} onChange={e=>setAllowRetakes(e.target.checked)} /> Allow retakes</label>
             <p className="muted">{examSource ? `Gaaffileen ${examSource.subject_name} — ${examSource.class_name} / ${examSource.section_name} keessaa fudhatamu; qormaanni assignment Admin siif kenne hundaaf adda addaan qophaa'a.` : "Admin assignment siif hin kennine."}</p>
-            {examSource && questions.filter(q=>q.subject_id===examSource.subject_id && q.class_id===examSource.class_id && q.section_id===examSource.section_id).map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
+            <p className="muted">{availableExamQuestions.length} gaaffii haaraa Create Exam keessatti filachuuf jiru. Gaaffiin qormaata draft ykn published keessatti duraan fayyadame asitti hin mul'atu; My Questions keessa garuu ni tura.</p>
+            {availableExamQuestions.map(q=><label className="inline-check" key={q._id}><input type="checkbox" checked={examQuestions.includes(q._id)} onChange={e=>setExamQuestions(old=>e.target.checked?[...old,q._id]:old.filter(id=>id!==q._id))} />{q.question_text} ({q.points} pt)</label>)}
+            {!availableExamQuestions.length && <p className="muted">Gaaffii haaraa filachuuf hin jiru. My Questions keessaa gaaffii haaraa uumi.</p>}
             <button disabled={busy || !examTargets.length || !examQuestions.length}>Create exam for all assignments</button>
           </form>
         </article>
