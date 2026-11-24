@@ -61,7 +61,10 @@ export default function StudentPage() {
       // Wait for queued saves, but still call submit if a final save was rejected
       // because the deadline elapsed (the backend may already have auto-submitted).
       await answerSaveQueue.current.catch(() => undefined);
+      const completedExamId = activeExam.id;
       await request(`/student/submissions/${activeExam.submissionId}/submit`, "POST");
+      // Remove it immediately from this student's view after the server confirms submission.
+      setExams(current => current.filter(exam => exam.id !== completedExamId));
       setActiveExam(null); setAnswers({});
       setMessage(automatic ? "Yeroon xumurameera. Deebiiwwan kee ergameera. Qormaanni kun tarree qormaata jiran keessaa haqameera." : "Qormaata xumurteetta. Qormaanni kun tarree qormaata jiran keessaa haqameera.");
       await refresh();
