@@ -23,6 +23,7 @@ export default function TeacherPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionSearch, setQuestionSearch] = useState("");
   const [questionPage, setQuestionPage] = useState(1);
+  const [examSearch, setExamSearch] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
@@ -145,6 +146,9 @@ export default function TeacherPage() {
   const visibleQuestions = filteredQuestions.slice(
     (questionPage - 1) * questionPageSize,
     questionPage * questionPageSize
+  );
+  const filteredExams = exams.filter(exam =>
+    exam.title.toLocaleLowerCase().includes(examSearch.trim().toLocaleLowerCase())
   );
 
   async function createQuestion(event: FormEvent) {
@@ -368,7 +372,22 @@ export default function TeacherPage() {
           <button type="button" className="secondary" disabled={questionPage === questionPageCount} onClick={() => setQuestionPage(p => Math.min(questionPageCount, p + 1))}>Next</button>
         </div>}
       </section>
-      <section className="admin-panel"><h2>My Exams</h2>{distributedExamIds.length > 0 && <button disabled={busy} onClick={publishDistributedExams}>Publish all distributed exams ({distributedExamIds.length})</button>}<ul>{exams.map(exam=><li key={exam._id} className="teacher-list-item"><span><strong>{exam.title}</strong><small>{exam.status} · {exam.duration_minutes} min · {exam.question_ids.length} questions</small></span><span className="teacher-actions">{exam.status==="draft" && <button disabled={busy} onClick={()=>publishExam(exam)}>Publish to all assignments</button>}<button className="secondary" disabled={busy} onClick={()=>openSubmissions(exam)}>Submissions</button></span></li>)}</ul></section>
+      <section className="admin-panel">
+        <h2>My Exams ({exams.length})</h2>
+        {distributedExamIds.length > 0 && <button disabled={busy} onClick={publishDistributedExams}>Publish all distributed exams ({distributedExamIds.length})</button>}
+        <label className="field-label" htmlFor="teacher-exam-search">Search exams by title</label>
+        <input
+          id="teacher-exam-search"
+          type="search"
+          value={examSearch}
+          placeholder="Maqaa qormaataa barbaadi..."
+          onChange={e => setExamSearch(e.target.value)}
+        />
+        <p className="muted">{filteredExams.length} qormaata argame.</p>
+        {filteredExams.length === 0
+          ? <p className="muted">Qormaata maqaa kanaan argame hin jiru.</p>
+          : <ul>{filteredExams.map(exam=><li key={exam._id} className="teacher-list-item"><span><strong>{exam.title}</strong><small>{exam.status} · {exam.duration_minutes} min · {exam.question_ids.length} questions</small></span><span className="teacher-actions">{exam.status==="draft" && <button disabled={busy} onClick={()=>publishExam(exam)}>Publish to all assignments</button>}<button className="secondary" disabled={busy} onClick={()=>openSubmissions(exam)}>Submissions</button></span></li>)}</ul>}
+      </section>
       {selectedExam && <section className="admin-panel"><h2>Submissions — {selectedExam.title}</h2>
         {!submissions.length && <p className="muted">Ammaaf submissions hin jiru.</p>}
         {submissions.map(sub=><article className="submission-card" key={sub._id}>
