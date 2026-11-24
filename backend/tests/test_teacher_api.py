@@ -252,7 +252,8 @@ def test_teacher_can_distribute_one_exam_to_all_assignments_and_publish_together
     for exam in exams:
         assert exam["question_ids"] == [exam["questions_snapshot"][0]["question_id"]]
 
-    published = ctx["client"].post("/api/v1/teacher/exams/publish-batch", json={"exam_ids": exam_ids})
+    # Publishing any one copy publishes the complete Admin-assigned group.
+    published = ctx["client"].post(f"/api/v1/teacher/exams/{exam_ids[0]}/publish")
     assert published.status_code == 200, published.text
     assert published.json()["published_count"] == 2
     assert ctx["db"].exams.count_documents({"_id": {"$in": exam_ids}, "status": "published"}) == 2
