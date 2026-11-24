@@ -173,6 +173,9 @@ async def start_exam(exam_id: str, db=Depends(get_db), student=Depends(student_a
     }, {"_id": 1})
     if completed_attempt and not exam.get("allow_retakes", False):
         raise HTTPException(status_code=409, detail="You have already submitted this exam")
+    attempts = await db.submissions.count_documents({
+        "exam_id": exam_id, "student_id": student["_id"],
+    })
     submission_id = str(uuid4())
     deadline = current + timedelta(minutes=exam["duration_minutes"])
     if exam.get("ends_at") and as_utc(exam["ends_at"]) < deadline:
