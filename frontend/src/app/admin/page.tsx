@@ -87,9 +87,14 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    // Authentication changes trigger the protected dashboard refresh; clear invalid sessions on failure.
+    // A dashboard data-loading failure must not erase a valid login session.
+    // Keep the Admin authenticated and show the actual Afaan Oromoo error on the dashboard.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (token && !mustChangePassword) refresh().catch((error) => { setMessage(oromoErrorMessage(error, "Daataa Admin fe'uun hin danda'amne.")); setToken(""); window.sessionStorage.removeItem("smartExamAdminToken"); window.sessionStorage.removeItem("smartExamAdminMustChangePassword"); });
+    if (token && !mustChangePassword) {
+      refresh().catch((error) => {
+        setMessage(oromoErrorMessage(error, "Daataa Admin fe'uun hin danda'amne. Fuula haaromsiitii irra deebi'ii yaali."));
+      });
+    }
     // Refresh only when authentication changes or the required password change is completed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, mustChangePassword]);
